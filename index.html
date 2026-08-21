@@ -796,7 +796,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "2.6";
+  const APP_VERSION = "2.7";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -1449,11 +1449,30 @@
   let currentTracks = { item: null, tracks: [] };
   const TRACKS_MAX = 300;
 
-  async function fetchPlaylistPage(playlistId, offset, useFields){
+  /* Spotify cambió en febrero de 2026 el endpoint de canciones de una lista:
+     /tracks pasó a /items, y en la respuesta "track" pasó a "item".
+     Usamos el nuevo y dejamos el viejo como reserva. */
+  async function fetchPlaylistPage(playlistId, offset, useFields, legacy){
+    if (legacy){
+      const f = useFields ? "&fields=total,items(track(name,uri,duration_ms,artists(name)))" : "";
+      return await spotifyFetch("/playlists/" + playlistId + "/tracks?limit=100&offset=" + offset + f);
+    }
     const fields = useFields
-      ? "&fields=total,items(track(name,uri,duration_ms,artists(name)))"
+      ? "&fields=total,items(item(name,uri,duration_ms,artists(name)))"
       : "";
-    return await spotifyFetch("/playlists/" + playlistId + "/tracks?limit=100&offset=" + offset + fields);
+    return await spotifyFetch("/playlists/" + playlistId + "/items?limit=100&offset=" + offset + fields);
+  }
+
+  function trackFromRow(row){
+    // El endpoint nuevo devuelve "item"; el antiguo devolvía "track".
+    const t = row.item || row.track;
+    if (!t || !t.uri || t.uri.indexOf("spotify:track:") !== 0) return null;
+    return {
+      name: t.name,
+      uri: t.uri,
+      duration: t.duration_ms,
+      artist: (t.artists || []).map(function(a){ return a.name; }).join(", ")
+    };
   }
 
   function spotifyMessage(err){
@@ -1481,7 +1500,7 @@
     if (s.indexOf("403") !== -1){
       return "Spotify ha rechazado la petición: " + literal +
              ". Lista de: " + ((item && item.owner) || "desconocido") +
-             ". Si es tuya, prueba a reconectar; si es de Spotify o de una marca, es su limitación.";
+             ". Desde la migración de febrero de 2026, una app en modo desarrollo solo puede leer el contenido de listas propias o en las que colaboras.";
     }
     if (s.indexOf("429") !== -1) return "Spotify está limitando las peticiones. Espera un momento y vuelve a intentarlo.";
     return "No se pudieron cargar las canciones. Respuesta: " + literal.slice(0, 160);
@@ -1503,19 +1522,16 @@
     if (falta) lineas.push("Permisos que faltan: " + (falta.length ? falta.join(", ") : "ninguno"));
 
     box.innerHTML = '<div class="modal-empty">Consultando…</div>';
-    // Petición mínima y directa, sin filtros, para ver la respuesta tal cual.
     try{
       const token = await getValidToken();
-      const url = "https://api.spotify.com/v1/playlists/" + id + "/tracks?limit=1";
-      const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
-      const texto = await res.text();
-      lineas.push("Petición mínima: HTTP " + res.status);
-      lineas.push("Respuesta: " + texto.slice(0, 300));
-
-      // Comprobamos también si la lista en sí es legible.
-      const res2 = await fetch("https://api.spotify.com/v1/playlists/" + id + "?fields=name,owner(display_name),public",
-        { headers: { Authorization: "Bearer " + token } });
-      lineas.push("Ficha de la lista: HTTP " + res2.status + " " + (await res2.text()).slice(0, 200));
+      const cab = { Authorization: "Bearer " + token };
+      const nuevo = await fetch("https://api.spotify.com/v1/playlists/" + id + "/items?limit=1", { headers: cab });
+      lineas.push("Endpoint nuevo (/items): HTTP " + nuevo.status + " " + (await nuevo.text()).slice(0, 200));
+      const viejo = await fetch("https://api.spotify.com/v1/playlists/" + id + "/tracks?limit=1", { headers: cab });
+      lineas.push("Endpoint antiguo (/tracks): HTTP " + viejo.status + " " + (await viejo.text()).slice(0, 160));
+      const ficha = await fetch("https://api.spotify.com/v1/playlists/" + id + "?fields=name,owner(display_name),public",
+        { headers: cab });
+      lineas.push("Ficha de la lista: HTTP " + ficha.status + " " + (await ficha.text()).slice(0, 160));
     } catch(err){
       lineas.push("Fallo de red: " + String(err).slice(0, 150));
     }
@@ -1555,32 +1571,32 @@
 
     const playlistId = item.uri.split(":").pop();
     let useFields = true;
+    let legacy = false;
     try{
       let tracks = [];
       let offset = 0;
       while (tracks.length < TRACKS_MAX){
         let data;
         try{
-          data = await fetchPlaylistPage(playlistId, offset, useFields);
+          data = await fetchPlaylistPage(playlistId, offset, useFields, legacy);
         } catch(err){
-          // Algunas listas rechazan el filtro de campos: reintentamos sin él.
-          if (useFields && offset === 0){
+          if (offset === 0 && useFields){
+            // Reintentos: primero sin filtro de campos, luego el endpoint antiguo.
             useFields = false;
-            data = await fetchPlaylistPage(playlistId, offset, false);
+            try{
+              data = await fetchPlaylistPage(playlistId, 0, false, false);
+            } catch(err2){
+              legacy = true;
+              data = await fetchPlaylistPage(playlistId, 0, false, true);
+            }
           } else {
             throw err;
           }
         }
         const rows = (data && data.items) ? data.items : [];
         rows.forEach(function(row){
-          if (row.track && row.track.uri && row.track.uri.indexOf("spotify:track:") === 0){
-            tracks.push({
-              name: row.track.name,
-              uri: row.track.uri,
-              duration: row.track.duration_ms,
-              artist: (row.track.artists || []).map(function(a){ return a.name; }).join(", ")
-            });
-          }
+          const t = trackFromRow(row);
+          if (t) tracks.push(t);
         });
         offset += 100;
         if (rows.length < 100 || offset >= (data && data.total ? data.total : 0)) break;

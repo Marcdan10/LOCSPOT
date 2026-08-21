@@ -1,6 +1,6 @@
 /* Sube este número junto con APP_VERSION en index.html: al cambiar,
    el navegador descarta la caché antigua y coge la versión nueva. */
-const VERSION = "2.6";
+const VERSION = "2.7";
 const CACHE = "locspot-" + VERSION;
 const SHELL = [
   "./",
