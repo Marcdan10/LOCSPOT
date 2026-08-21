@@ -796,7 +796,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "2.5";
+  const APP_VERSION = "2.6";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -890,7 +890,7 @@
   }
 
   /* ============ AUTH FLOW ============ */
-  async function beginLogin(){
+  async function beginLogin(forzar){
     const typed = document.getElementById("client-id").value.trim();
     const clientId = (CLIENT_ID && CLIENT_ID.trim()) || typed;
     if (!clientId){
@@ -914,6 +914,9 @@
       code_challenge: challenge,
       scope: SCOPES
     });
+    // Al reconectar hay que forzar la pantalla de permisos: si no, Spotify
+    // reutiliza la autorización anterior y devuelve los permisos antiguos.
+    if (forzar) params.set("show_dialog", "true");
     window.location.href = "https://accounts.spotify.com/authorize?" + params.toString();
   }
 
@@ -960,12 +963,21 @@
   }
 
   function saveTokens(data){
+    const previo = JSON.parse(localStorage.getItem(LS_TOKENS) || "null");
     const record = {
       access_token: data.access_token,
       refresh_token: data.refresh_token,
-      expires_at: Date.now() + (data.expires_in * 1000) - 30000
+      expires_at: Date.now() + (data.expires_in * 1000) - 30000,
+      // Spotify devuelve aquí los permisos realmente concedidos, que no
+      // tienen por qué coincidir con los que pedimos si el token es antiguo.
+      scope: data.scope || (previo && previo.scope) || ""
     };
     localStorage.setItem(LS_TOKENS, JSON.stringify(record));
+  }
+
+  function grantedScopes(){
+    const t = JSON.parse(localStorage.getItem(LS_TOKENS) || "null");
+    return (t && t.scope) ? t.scope.split(" ").filter(Boolean) : [];
   }
 
   async function getValidToken(){
@@ -1475,9 +1487,50 @@
     return "No se pudieron cargar las canciones. Respuesta: " + literal.slice(0, 160);
   }
 
+  async function diagnosePlaylist(item){
+    const box = document.getElementById("tracks-list");
+    const id = item.uri.split(":").pop();
+    const concedidos = grantedScopes();
+    const falta = concedidos.length
+      ? ["playlist-read-private", "playlist-read-collaborative"].filter(function(s){ return concedidos.indexOf(s) === -1; })
+      : null;
+
+    let lineas = [];
+    lineas.push("Lista: " + item.name);
+    lineas.push("Propietario: " + (item.owner || "?"));
+    lineas.push("Id: " + id);
+    lineas.push("Permisos concedidos: " + (concedidos.length ? concedidos.join(", ") : "desconocidos (token anterior a esta versión: reconecta)"));
+    if (falta) lineas.push("Permisos que faltan: " + (falta.length ? falta.join(", ") : "ninguno"));
+
+    box.innerHTML = '<div class="modal-empty">Consultando…</div>';
+    // Petición mínima y directa, sin filtros, para ver la respuesta tal cual.
+    try{
+      const token = await getValidToken();
+      const url = "https://api.spotify.com/v1/playlists/" + id + "/tracks?limit=1";
+      const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+      const texto = await res.text();
+      lineas.push("Petición mínima: HTTP " + res.status);
+      lineas.push("Respuesta: " + texto.slice(0, 300));
+
+      // Comprobamos también si la lista en sí es legible.
+      const res2 = await fetch("https://api.spotify.com/v1/playlists/" + id + "?fields=name,owner(display_name),public",
+        { headers: { Authorization: "Bearer " + token } });
+      lineas.push("Ficha de la lista: HTTP " + res2.status + " " + (await res2.text()).slice(0, 200));
+    } catch(err){
+      lineas.push("Fallo de red: " + String(err).slice(0, 150));
+    }
+
+    box.innerHTML =
+      '<div class="modal-empty" style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-word;">' +
+      esc(lineas.join("\n")) + '</div>' +
+      '<button class="cat-remove" id="tracks-reconnect" style="margin-top:12px;border-color:var(--ochre);color:var(--rust);">Volver a conectar con Spotify</button>';
+    const r = document.getElementById("tracks-reconnect");
+    if (r) r.addEventListener("click", reconnectSpotify);
+  }
+
   function reconnectSpotify(){
     localStorage.removeItem(LS_TOKENS);
-    beginLogin();
+    beginLogin(true);
   }
 
   async function openTrackPicker(item){
@@ -1547,9 +1600,12 @@
         (necesitaLogin
           ? '<button class="cat-remove" id="tracks-reconnect" style="margin-top:12px;border-color:var(--ochre);color:var(--rust);">Volver a conectar con Spotify</button>'
           : '') +
+        '<button class="cat-remove" id="tracks-diagnose" style="margin-top:8px;">Ver diagnóstico</button>' +
         '<button class="cat-remove" id="tracks-play-anyway" style="margin-top:8px;">Reproducir la lista igualmente</button>';
       const r = document.getElementById("tracks-reconnect");
       if (r) r.addEventListener("click", reconnectSpotify);
+      const d = document.getElementById("tracks-diagnose");
+      if (d) d.addEventListener("click", function(){ diagnosePlaylist(item); });
       const b = document.getElementById("tracks-play-anyway");
       if (b) b.addEventListener("click", function(){
         closeTracksModal();
@@ -2932,7 +2988,7 @@
     }
   }
 
-  document.getElementById("connect-btn").addEventListener("click", beginLogin);
+  document.getElementById("connect-btn").addEventListener("click", function(){ beginLogin(false); });
 
   if ("serviceWorker" in navigator){
     window.addEventListener("load", function(){
