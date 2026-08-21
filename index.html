@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1B2430">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LOCSPOT">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<title>LOCSPOT — tus accesos directos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream: #EDE6D6;
+    --cream-2: #E4DBC6;
+    --ink: #1B2430;
+    --ink-soft: #3A4453;
+    --ochre: #C9A227;
+    --rust: #A64B2A;
+    --moss: #4B5842;
+    --line: #D9CFB8;
+    --white: #FFFBF2;
+    --radius: 4px;
+    --shadow: 0 1px 0 rgba(27,36,48,0.06), 0 8px 20px -12px rgba(27,36,48,0.35);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--cream);
+    color:var(--ink);
+    font-family:'Work Sans',sans-serif;
+    min-height:100vh;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(27,36,48,0.05) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+
+  h1,h2,h3,.display{
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+
+  .mono{ font-family:'IBM Plex Mono',monospace; }
+
+  button{ font-family:inherit; cursor:pointer; }
+  input{ font-family:inherit; }
+
+  a{ color:inherit; }
+
+  ::selection{ background:var(--ochre); color:var(--ink); }
+
+  /* ---------- Onboarding ---------- */
+  #onboarding{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .onboard-card{
+    width:100%;
+    max-width:520px;
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:10px;
+    box-shadow:var(--shadow);
+    padding:40px 36px;
+  }
+  .onboard-card .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--rust);
+    margin-bottom:10px;
+  }
+  .onboard-card h1{ font-size:32px; margin-bottom:6px; }
+  .onboard-card p{ color:var(--ink-soft); line-height:1.55; font-size:14.5px; }
+  .onboard-step{
+    margin-top:26px;
+    padding-top:22px;
+    border-top:1px solid var(--line);
+  }
+  .onboard-step .step-label{
+    display:flex; align-items:center; gap:10px;
+    font-size:13px; color:var(--ink-soft); margin-bottom:10px;
+  }
+  .step-dot{
+    width:20px; height:20px; border-radius:50%;
+    background:var(--ink); color:var(--white);
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-family:'IBM Plex Mono',monospace; flex:none;
+  }
+  .redirect-box{
+    display:flex; align-items:center; gap:8px;
+    background:var(--cream-2); border:1px solid var(--line);
+    border-radius:6px; padding:10px 12px; margin:8px 0 4px;
+  }
+  .redirect-box code{ font-family:'IBM Plex Mono',monospace; font-size:12.5px; flex:1; overflow-x:auto; white-space:nowrap; }
+  .copy-btn{
+    background:var(--ink); color:var(--white); border:none;
+    border-radius:5px; padding:6px 10px; font-size:12px; flex:none;
+  }
+  .copy-btn:hover{ background:var(--ink-soft); }
+
+  #client-id{
+    width:100%; padding:11px 13px; margin-top:6px;
+    border:1px solid var(--line); border-radius:6px;
+    background:var(--white); font-size:14px; color:var(--ink);
+  }
+  #client-id:focus{ outline:2px solid var(--ochre); outline-offset:1px; }
+
+  .connect-btn{
+    width:100%; margin-top:22px; padding:13px 16px;
+    background:var(--ink); color:var(--white); border:none;
+    border-radius:6px; font-size:15px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    transition:transform .12s ease, background .12s ease;
+  }
+  .connect-btn:hover{ background:var(--rust); }
+  .connect-btn:active{ transform:scale(0.98); }
+  .connect-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .connect-btn:focus-visible{ outline:2px solid var(--ochre); outline-offset:2px; }
+
+  .onboard-error{
+    margin-top:14px; padding:10px 12px; border-radius:6px;
+    background:#F4E3DC; border:1px solid var(--rust); color:var(--rust);
+    font-size:13px; display:none;
+  }
+
+  /* ---------- App shell ---------- */
+  #app{ display:none; padding-bottom:110px; }
+  #app.visible{ display:block; }
+
+  header.topbar{
+    position:sticky; top:0; z-index:20;
+    background:rgba(237,230,214,0.92);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);
+  }
+  .topbar-inner{
+    max-width:1080px; margin:0 auto; padding:18px 24px 14px;
+    display:flex; align-items:baseline; justify-content:space-between; gap:24px; flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:26px; }
+  .brand .tag{ font-size:12px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; letter-spacing:0.04em; }
+
+  .search-wrap{ flex:1; min-width:220px; max-width:340px; position:relative; }
+  .search-wrap input{
+    width:100%; padding:9px 14px 9px 34px;
+    border:1px solid var(--line); border-radius:20px;
+    background:var(--white); font-size:13.5px;
+  }
+  .search-wrap input:focus{ outline:2px solid var(--ochre); outline-offset:1px; }
+  .search-wrap svg{ position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:0.5; }
+
+  nav.tabs{
+    max-width:1080px; margin:0 auto; padding:0 24px 14px;
+    display:flex; gap:6px; overflow-x:auto; scrollbar-width:none;
+  }
+  nav.tabs::-webkit-scrollbar{ display:none; }
+  nav.tabs button{
+    background:transparent; border:1px solid transparent;
+    padding:6px 14px; border-radius:16px; font-size:13px; color:var(--ink-soft);
+    white-space:nowrap; flex:none;
+  }
+  nav.tabs button.active{ background:var(--ink); color:var(--white); }
+  nav.tabs button:hover:not(.active){ border-color:var(--line); color:var(--ink); }
+  nav.tabs button:focus-visible{ outline:2px solid var(--ochre); outline-offset:1px; }
+
+  main{ max-width:1080px; margin:0 auto; padding:8px 24px 40px; }
+
+  section.block{ margin-top:34px; }
+  .block-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
+  .block-head h2{ font-size:19px; }
+  .block-head .count{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); }
+
+  .empty-note{
+    border:1px dashed var(--line); border-radius:8px; padding:22px;
+    color:var(--ink-soft); font-size:13.5px; line-height:1.6;
+  }
+
+  /* ---------- Cards ---------- */
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:10px; }
+  .grid.list-style{ grid-template-columns:1fr; gap:8px; }
+
+  .card{
+    background:var(--white); border:1px solid var(--line); border-radius:8px;
+    overflow:hidden; position:relative; box-shadow:var(--shadow);
+    transition:transform .12s ease;
+  }
+  .card:hover{ transform:translateY(-2px); }
+
+  .card .art-wrap{
+    position:relative; width:100%; aspect-ratio:1/1; background:var(--cream-2);
+    overflow:hidden;
+  }
+  .card .art-wrap img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .card.playing .art-wrap::after{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(circle at 50% 50%, transparent 32%, rgba(27,36,48,0.55) 100%);
+  }
+  .vinyl{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; opacity:0;
+  }
+  .card.playing .vinyl{ opacity:1; }
+  .vinyl-disc{
+    width:46%; height:46%; border-radius:50%;
+    background:repeating-radial-gradient(circle, var(--ink) 0 2px, #262f3d 2px 4px);
+    border:2px solid var(--ochre);
+    animation:spin 3.2s linear infinite;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .vinyl-disc::after{
+    content:""; width:22%; height:22%; border-radius:50%; background:var(--ochre);
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce){ .vinyl-disc{ animation:none; } }
+
+  .pin-toggle{
+    position:absolute; top:5px; right:5px; z-index:2;
+    width:23px; height:23px; border-radius:50%; border:none;
+    background:rgba(27,36,48,0.55); color:var(--white);
+    display:flex; align-items:center; justify-content:center; font-size:12px;
+  }
+  .pin-toggle.pinned{ background:var(--ochre); color:var(--ink); }
+  .pin-toggle:hover{ background:var(--rust); color:var(--white); }
+  .pin-toggle:focus-visible{ outline:2px solid var(--ochre); outline-offset:2px; }
+
+  .type-flag{
+    position:absolute; top:5px; left:5px; z-index:2;
+    font-family:'IBM Plex Mono',monospace; font-size:8.5px; letter-spacing:0.05em; text-transform:uppercase;
+    background:var(--ink); color:var(--white); padding:2px 5px; border-radius:3px;
+  }
+  .type-flag.podcast{ background:var(--moss); }
+
+  .card .meta{ padding:7px 8px 8px; }
+  .card .meta .name{ font-size:11.5px; font-weight:600; line-height:1.25; margin-bottom:1px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card .meta .owner{ font-size:10px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .card .play-btn{
+    position:absolute; bottom:6px; right:6px; z-index:2;
+    width:30px; height:30px; border-radius:50%; border:none;
+    background:var(--ochre); color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; transform:translateY(5px);
+    transition:opacity .12s ease, transform .12s ease;
+    box-shadow:0 3px 8px rgba(27,36,48,0.3);
+  }
+  .card:hover .play-btn, .card:focus-within .play-btn{ opacity:1; transform:translateY(0); }
+  .card .play-btn:hover{ background:var(--rust); color:var(--white); }
+
+  /* list-style rows for library section */
+  .row{
+    display:flex; align-items:center; gap:12px;
+    background:var(--white); border:1px solid var(--line); border-radius:6px;
+    padding:8px 10px;
+  }
+  .row img{ width:42px; height:42px; border-radius:4px; object-fit:cover; flex:none; background:var(--cream-2); }
+  .row .name{ font-size:13.5px; font-weight:600; }
+  .row .owner{ font-size:11.5px; color:var(--ink-soft); }
+  .row .row-play{
+    margin-left:auto; width:30px; height:30px; border-radius:50%; border:none;
+    background:var(--cream-2); display:flex; align-items:center; justify-content:center; flex:none;
+  }
+  .row .row-play:hover{ background:var(--ochre); }
+  .row .pin-toggle{ position:static; width:26px; height:26px; background:var(--cream-2); color:var(--ink); flex:none; }
+  .row .pin-toggle.pinned{ background:var(--ochre); }
+
+  /* ---------- Now playing bar ---------- */
+  #now-playing{
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
+    background:var(--ink); color:var(--white);
+    border-top:1px solid #0F1620;
+    padding:10px 20px calc(10px + env(safe-area-inset-bottom));
+    display:none;
+    align-items:center; gap:18px;
+  }
+  #now-playing.visible{ display:flex; }
+  .np-art{ width:48px; height:48px; border-radius:4px; object-fit:cover; flex:none; background:#2A3444; }
+  .np-meta{ min-width:0; width:190px; flex:none; cursor:pointer; }
+  .np-meta .track{ font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .np-meta .artist{ font-size:11.5px; color:#B7BFCC; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .np-controls{ display:flex; align-items:center; gap:14px; flex:none; }
+  .np-controls button{ background:transparent; border:none; color:var(--white); display:flex; }
+  .np-controls button:hover{ color:var(--ochre); }
+  .np-controls .np-playpause{
+    width:34px; height:34px; border-radius:50%; background:var(--white); color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .np-controls .np-playpause:hover{ background:var(--ochre); }
+  .np-progress{ flex:1; display:flex; align-items:center; gap:10px; min-width:120px; }
+  .np-progress .time{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#B7BFCC; width:34px; flex:none; }
+  .np-bar{ flex:1; height:4px; background:#3A4453; border-radius:2px; position:relative; cursor:pointer; }
+  .np-bar-fill{ position:absolute; left:0; top:0; bottom:0; background:var(--ochre); border-radius:2px; width:0%; }
+  .np-device{ font-size:10.5px; color:#8891A0; flex:none; font-family:'IBM Plex Mono',monospace; display:none; }
+  @media (min-width:720px){ .np-device{ display:block; } }
+
+  .toast{
+    position:fixed; bottom:96px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--white); padding:10px 18px; border-radius:20px;
+    font-size:13px; z-index:40; opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .toast.visible{ opacity:1; }
+
+  #np-full{
+    position:fixed; inset:0; z-index:60;
+    background:var(--ink); color:var(--white);
+    display:flex; flex-direction:column; align-items:center;
+    padding:calc(18px + env(safe-area-inset-top)) 24px calc(28px + env(safe-area-inset-bottom));
+    transform:translateY(100%); transition:transform .28s ease;
+    visibility:hidden;
+  }
+  #np-full.visible{ transform:translateY(0); visibility:visible; }
+  @media (prefers-reduced-motion: reduce){ #np-full{ transition:none; } }
+
+  .npf-top{ width:100%; max-width:420px; display:flex; align-items:center; justify-content:space-between; margin-bottom:auto; }
+  .npf-min{ background:transparent; border:none; color:var(--white); display:flex; padding:6px; }
+  .npf-min:hover{ color:var(--ochre); }
+  .npf-where{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:#8891A0; text-align:center; }
+
+  .npf-art{
+    width:100%; max-width:300px; aspect-ratio:1/1; border-radius:8px;
+    object-fit:cover; background:#2A3444; margin:18px 0 24px;
+    box-shadow:0 16px 40px -18px rgba(0,0,0,0.9);
+  }
+  .npf-info{ width:100%; max-width:420px; text-align:left; margin-bottom:18px; }
+  .npf-track{ font-family:'Fraunces',serif; font-size:22px; font-weight:600; line-height:1.25; margin-bottom:4px; }
+  .npf-artist{ font-size:14px; color:#B7BFCC; }
+
+  .npf-progress{ width:100%; max-width:420px; margin-bottom:20px; }
+  .npf-bar{ height:5px; background:#3A4453; border-radius:3px; position:relative; cursor:pointer; }
+  .npf-bar-fill{ position:absolute; left:0; top:0; bottom:0; background:var(--ochre); border-radius:3px; width:0%; }
+  .npf-times{ display:flex; justify-content:space-between; margin-top:7px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8891A0; }
+
+  .npf-controls{ display:flex; align-items:center; justify-content:center; gap:28px; margin-bottom:auto; }
+  .npf-controls button{ background:transparent; border:none; color:var(--white); display:flex; }
+  .npf-controls button:hover{ color:var(--ochre); }
+  .npf-playpause{
+    width:60px; height:60px; border-radius:50%; background:var(--white); color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .npf-playpause:hover{ background:var(--ochre); }
+  .npf-shuffle{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#8891A0; }
+  .npf-shuffle.on{ color:var(--ochre); }
+
+  .shuffle-switch{ display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink-soft); flex:none; }
+  .switch-track{ width:36px; height:20px; border-radius:11px; background:var(--cream-2); border:1px solid var(--line); position:relative; transition:background .15s ease; cursor:pointer; }
+  .switch-track.on{ background:var(--ochre); border-color:var(--ochre); }
+  .switch-thumb{ position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--white); box-shadow:0 1px 2px rgba(27,36,48,0.3); transition:transform .15s ease; }
+  .switch-track.on .switch-thumb{ transform:translateX(16px); }
+  .switch-track:focus-visible{ outline:2px solid var(--ochre); outline-offset:2px; }
+
+  .modal-backdrop{ position:fixed; inset:0; z-index:50; background:rgba(27,36,48,0.55); display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal-backdrop.visible{ display:flex; }
+  .modal-panel{ width:100%; max-width:460px; max-height:80vh; overflow-y:auto; background:var(--white); border-radius:10px; border:1px solid var(--line); box-shadow:var(--shadow); padding:22px 22px 18px; }
+  .modal-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:6px; }
+  .modal-head h3{ font-family:'Fraunces',serif; font-size:19px; font-weight:600; margin:0; }
+  .modal-close{ background:transparent; border:none; color:var(--ink-soft); font-size:20px; line-height:1; padding:2px; }
+  .modal-close:hover{ color:var(--rust); }
+  .modal-sub{ font-size:12px; color:var(--ink-soft); margin:0 0 14px; }
+  .filter-row{ display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size:13px; color:var(--ink-soft); cursor:pointer; }
+  .filter-row input[type=checkbox]{ width:15px; height:15px; accent-color:var(--ochre); }
+  .episode-row{ display:flex; align-items:center; gap:12px; padding:10px 4px; border-top:1px solid var(--line); }
+  .episode-row:first-of-type{ border-top:none; }
+  .episode-row .ep-name{ font-size:13.5px; font-weight:600; margin-bottom:2px; }
+  .episode-row .ep-meta{ font-size:11px; color:var(--ink-soft); display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .ep-badge{ font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:0.05em; text-transform:uppercase; background:var(--cream-2); color:var(--ink-soft); padding:2px 6px; border-radius:8px; }
+  .episode-row .ep-play{ margin-left:auto; width:30px; height:30px; border-radius:50%; border:none; background:var(--cream-2); display:flex; align-items:center; justify-content:center; flex:none; }
+  .episode-row .ep-play:hover{ background:var(--ochre); }
+  .modal-empty{ padding:16px 4px; color:var(--ink-soft); font-size:13px; }
+
+  .cat-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin-bottom:4px; }
+  .cat-option{ background:var(--cream-2); border:1px solid var(--line); border-radius:6px; padding:11px 12px; font-size:13.5px; color:var(--ink); text-align:left; }
+  .cat-option:hover{ background:var(--ochre); border-color:var(--ochre); }
+  .cat-option.current{ background:var(--ink); color:var(--white); border-color:var(--ink); }
+  .cat-option:focus-visible{ outline:2px solid var(--ochre); outline-offset:2px; }
+  .cat-remove{ width:100%; margin-top:12px; padding:10px; background:transparent; border:1px solid var(--rust); color:var(--rust); border-radius:6px; font-size:13px; }
+  .cat-remove:hover{ background:var(--rust); color:var(--white); }
+
+  .group-head{ display:flex; align-items:baseline; gap:10px; margin:22px 0 12px; }
+  .group-head:first-of-type{ margin-top:0; }
+  .group-head .group-name{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--rust); }
+  .group-head .group-rule{ flex:1; height:1px; background:var(--line); }
+  .group-head .group-count{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); }
+
+  .device-btn{
+    background:transparent; border:1px solid var(--line); border-radius:16px;
+    padding:6px 12px; font-size:12.5px; color:var(--ink-soft); flex:none;
+    display:flex; align-items:center; gap:7px; max-width:190px;
+  }
+  .device-btn:hover{ border-color:var(--ink-soft); color:var(--ink); }
+  .device-btn:focus-visible{ outline:2px solid var(--ochre); outline-offset:2px; }
+  .device-btn .dot{ width:7px; height:7px; border-radius:50%; background:var(--moss); flex:none; }
+  .device-btn .label{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .device-row{
+    display:flex; align-items:center; gap:12px; width:100%;
+    padding:11px 12px; border:1px solid var(--line); border-radius:6px;
+    background:var(--white); margin-bottom:8px; text-align:left; color:var(--ink);
+  }
+  .device-row:hover{ border-color:var(--ink-soft); background:var(--cream-2); }
+  .device-row.current{ background:var(--ink); color:var(--white); border-color:var(--ink); }
+  .device-row .d-icon{ font-size:15px; flex:none; opacity:0.8; display:flex; }
+  .device-row .d-name{ font-size:13.5px; font-weight:600; }
+  .device-row .d-type{ font-size:11px; opacity:0.75; }
+  .device-row .d-mark{ margin-left:auto; font-size:12px; flex:none; }
+
+  .spinner{
+    width:16px; height:16px; border-radius:50%;
+    border:2px solid rgba(255,255,255,0.35); border-top-color:var(--white);
+    animation:spin 0.7s linear infinite; display:inline-block;
+  }
+
+  @media (max-width:640px){
+    .grid{ grid-template-columns:repeat(auto-fill,minmax(74px,1fr)); gap:6px; }
+    .card .meta{ padding:5px 6px 6px; }
+    .card .meta .name{ font-size:10.5px; line-height:1.2; }
+    .card .meta .owner{ display:none; }
+    .pin-toggle{ width:20px; height:20px; font-size:10px; top:4px; right:4px; }
+    .type-flag{ font-size:7.5px; padding:1px 4px; top:4px; left:4px; }
+    .card .play-btn{ width:26px; height:26px; bottom:4px; right:4px; opacity:1; transform:none; }
+    #now-playing{ padding:8px 12px; gap:10px; }
+    .np-meta{ width:110px; }
+    .np-progress .time:last-child{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== ONBOARDING ===================== -->
+<div id="onboarding">
+  <div class="onboard-card">
+    <div class="eyebrow">LOCSPOT · panel personal de Spotify</div>
+    <h1>Tu Spotify, a mano</h1>
+    <p>Accesos directos a tus playlists y podcasts favoritos, con reproducción real dentro de esta misma página. Necesita conectarse a tu cuenta de Spotify Premium.</p>
+
+    <div class="onboard-step">
+      <div class="step-label"><span class="step-dot">1</span> Crea una app en el panel de Spotify</div>
+      <p style="margin:0 0 6px;font-size:13px;">Entra en <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>, pulsa "Create app" y añade esta URL exacta como Redirect URI:</p>
+      <div class="redirect-box">
+        <code id="redirect-display"></code>
+        <button class="copy-btn" id="copy-redirect">Copiar</button>
+      </div>
+    </div>
+
+    <div class="onboard-step" id="step-client-id">
+      <div class="step-label"><span class="step-dot">2</span> Pega tu Client ID</div>
+      <input type="text" id="client-id" placeholder="Ej. 8f3a9c2e1b4d4f7e9a0c1234567890ab" autocomplete="off" spellcheck="false">
+    </div>
+
+    <button class="connect-btn" id="connect-btn">Conectar con Spotify</button>
+    <div class="onboard-error" id="onboard-error"></div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <h1>LOCSPOT</h1>
+        <span class="tag">tu biblioteca, sin ruido</span>
+      </div>
+      <div class="search-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search-input" type="text" placeholder="Buscar en tu biblioteca…">
+      </div>
+      <div class="shuffle-switch">
+        <span id="shuffle-label">Aleatorio</span>
+        <span class="switch-track" id="shuffle-track" role="switch" aria-checked="false" aria-labelledby="shuffle-label" tabindex="0"><span class="switch-thumb"></span></span>
+      </div>
+      <button class="device-btn" id="device-btn"><span class="dot"></span><span class="label" id="device-btn-label">Este navegador</span></button>
+    </div>
+    <nav class="tabs" id="tabs"></nav>
+  </header>
+
+  <main>
+    <section class="block">
+      <div class="block-head">
+        <h2>Tus accesos directos</h2>
+        <span class="count" id="fav-count"></span>
+      </div>
+      <div id="favorites-grid"></div>
+      <div id="favorites-empty" class="empty-note" style="display:none;">
+        Todavía no has fijado nada. Marca la ⭐ de cualquier playlist o podcast de abajo para que aparezca aquí como acceso directo.
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2>Toda tu biblioteca</h2>
+        <span class="count" id="lib-count"></span>
+      </div>
+      <div id="library-list" class="grid list-style"></div>
+      <div id="library-loading" class="empty-note">Cargando tu biblioteca de Spotify…</div>
+    </section>
+  </main>
+</div>
+
+<div id="now-playing">
+  <img id="np-art" class="np-art" alt="">
+  <div class="np-meta">
+    <div class="track" id="np-track">—</div>
+    <div class="artist" id="np-artist">—</div>
+  </div>
+  <div class="np-controls">
+    <button id="np-prev" title="Anterior" aria-label="Anterior">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l10-6v12z"/></svg>
+    </button>
+    <button id="np-playpause" class="np-playpause" title="Reproducir / pausar" aria-label="Reproducir o pausar">
+      <svg id="np-play-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <button id="np-next" title="Siguiente" aria-label="Siguiente">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4.5 6l10 6-10 6z"/></svg>
+    </button>
+  </div>
+  <div class="np-progress">
+    <span class="time" id="np-elapsed">0:00</span>
+    <div class="np-bar" id="np-bar"><div class="np-bar-fill" id="np-bar-fill"></div></div>
+    <span class="time" id="np-total">0:00</span>
+  </div>
+  <span class="np-device" id="np-device">LOCSPOT Web Player</span>
+</div>
+
+<div class="modal-backdrop" id="episode-modal">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-show-name">
+    <div class="modal-head">
+      <h3 id="modal-show-name">—</h3>
+      <button class="modal-close" id="modal-close" aria-label="Cerrar">✕</button>
+    </div>
+    <p class="modal-sub">Elige qué episodio escuchar.</p>
+    <label class="filter-row">
+      <input type="checkbox" id="modal-filter-unplayed">
+      Mostrar solo no escuchados
+    </label>
+    <div id="modal-episode-list"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="category-modal">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
+    <div class="modal-head">
+      <h3 id="cat-modal-title">Añadir a un grupo</h3>
+      <button class="modal-close" id="cat-modal-close" aria-label="Cerrar">✕</button>
+    </div>
+    <p class="modal-sub" id="cat-modal-sub">—</p>
+    <div class="cat-grid" id="cat-grid"></div>
+    <button class="cat-remove" id="cat-remove" style="display:none;">Quitar de accesos directos</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="device-modal">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="device-modal-title">
+    <div class="modal-head">
+      <h3 id="device-modal-title">¿Dónde quieres que suene?</h3>
+      <button class="modal-close" id="device-modal-close" aria-label="Cerrar">✕</button>
+    </div>
+    <p class="modal-sub">En el móvil, elige la app de Spotify si quieres seguir escuchando con la pantalla bloqueada.</p>
+    <div id="device-list"></div>
+  </div>
+</div>
+
+<div id="np-full">
+  <div class="npf-top">
+    <button class="npf-min" id="npf-min" aria-label="Minimizar">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <span class="npf-where" id="npf-where">Sonando en</span>
+    <span style="width:34px;"></span>
+  </div>
+
+  <img id="npf-art" class="npf-art" alt="">
+
+  <div class="npf-info">
+    <div class="npf-track" id="npf-track">—</div>
+    <div class="npf-artist" id="npf-artist">—</div>
+  </div>
+
+  <div class="npf-progress">
+    <div class="npf-bar" id="npf-bar"><div class="npf-bar-fill" id="npf-bar-fill"></div></div>
+    <div class="npf-times">
+      <span id="npf-elapsed">0:00</span>
+      <span id="npf-total">0:00</span>
+    </div>
+  </div>
+
+  <div class="npf-controls">
+    <button id="npf-prev" aria-label="Anterior">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l10-6v12z"/></svg>
+    </button>
+    <button id="npf-playpause" class="npf-playpause" aria-label="Reproducir o pausar">
+      <svg id="npf-play-icon" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <button id="npf-next" aria-label="Siguiente">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4.5 6l10 6-10 6z"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  /* =====================================================================
+     PEGA AQUÍ TU CLIENT ID DE SPOTIFY, ENTRE LAS COMILLAS.
+     Lo encuentras en developer.spotify.com/dashboard > tu app > Settings.
+     Si lo dejas vacío, la app te lo pedirá en pantalla en cada dispositivo.
+     ===================================================================== */
+  const CLIENT_ID = "";
+
+  /* ============ CONFIG ============ */
+  const REDIRECT_URI = window.location.origin + window.location.pathname;
+  const SCOPES = [
+    "streaming",
+    "user-read-email",
+    "user-read-private",
+    "user-library-read",
+    "user-read-playback-position",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "playlist-read-private",
+    "playlist-read-collaborative"
+  ].join(" ");
+  const LS_CLIENT_ID = "locspot_client_id";
+
+  function getClientId(){
+    return (CLIENT_ID && CLIENT_ID.trim()) || localStorage.getItem(LS_CLIENT_ID) || "";
+  }
+  const LS_TOKENS = "locspot_tokens";
+  const LS_PINS = "locspot_pins";
+  const SS_VERIFIER = "locspot_pkce_verifier";
+
+  document.getElementById("redirect-display").textContent = REDIRECT_URI;
+  document.getElementById("copy-redirect").addEventListener("click", function(){
+    navigator.clipboard.writeText(REDIRECT_URI).then(function(){
+      const btn = document.getElementById("copy-redirect");
+      const original = btn.textContent;
+      btn.textContent = "Copiado";
+      setTimeout(function(){ btn.textContent = original; }, 1500);
+    });
+  });
+
+  /* ============ PKCE HELPERS ============ */
+  function randomString(len){
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const vals = crypto.getRandomValues(new Uint8Array(len));
+    let out = "";
+    for (let i = 0; i < len; i++) out += chars[vals[i] % chars.length];
+    return out;
+  }
+  function base64urlFromBuffer(buf){
+    let str = "";
+    const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+    return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  async function pkceChallenge(verifier){
+    const data = new TextEncoder().encode(verifier);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return base64urlFromBuffer(digest);
+  }
+
+  function showOnboardError(msg){
+    const el = document.getElementById("onboard-error");
+    el.textContent = msg;
+    el.style.display = "block";
+  }
+
+  /* ============ AUTH FLOW ============ */
+  async function beginLogin(){
+    const typed = document.getElementById("client-id").value.trim();
+    const clientId = (CLIENT_ID && CLIENT_ID.trim()) || typed;
+    if (!clientId){
+      showOnboardError("Pega primero tu Client ID de Spotify.");
+      return;
+    }
+    if (!CLIENT_ID || !CLIENT_ID.trim()) localStorage.setItem(LS_CLIENT_ID, clientId);
+    const btn = document.getElementById("connect-btn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Conectando…';
+
+    const verifier = randomString(64);
+    sessionStorage.setItem(SS_VERIFIER, verifier);
+    const challenge = await pkceChallenge(verifier);
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: "code",
+      redirect_uri: REDIRECT_URI,
+      code_challenge_method: "S256",
+      code_challenge: challenge,
+      scope: SCOPES
+    });
+    window.location.href = "https://accounts.spotify.com/authorize?" + params.toString();
+  }
+
+  async function exchangeCodeForToken(code){
+    const clientId = getClientId();
+    const verifier = sessionStorage.getItem(SS_VERIFIER);
+    const body = new URLSearchParams({
+      client_id: clientId,
+      grant_type: "authorization_code",
+      code: code,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: verifier
+    });
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+    if (!res.ok) throw new Error("token_exchange_failed");
+    const data = await res.json();
+    saveTokens(data);
+    return data;
+  }
+
+  async function refreshAccessToken(){
+    const clientId = getClientId();
+    const tokens = JSON.parse(localStorage.getItem(LS_TOKENS) || "null");
+    if (!tokens || !tokens.refresh_token) throw new Error("no_refresh_token");
+    const body = new URLSearchParams({
+      client_id: clientId,
+      grant_type: "refresh_token",
+      refresh_token: tokens.refresh_token
+    });
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+    if (!res.ok) throw new Error("refresh_failed");
+    const data = await res.json();
+    if (!data.refresh_token) data.refresh_token = tokens.refresh_token;
+    saveTokens(data);
+    return data.access_token;
+  }
+
+  function saveTokens(data){
+    const record = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: Date.now() + (data.expires_in * 1000) - 30000
+    };
+    localStorage.setItem(LS_TOKENS, JSON.stringify(record));
+  }
+
+  async function getValidToken(){
+    const tokens = JSON.parse(localStorage.getItem(LS_TOKENS) || "null");
+    if (!tokens) throw new Error("not_authenticated");
+    if (Date.now() >= tokens.expires_at){
+      return await refreshAccessToken();
+    }
+    return tokens.access_token;
+  }
+
+  async function spotifyFetch(path, opts){
+    opts = opts || {};
+    const token = await getValidToken();
+    const headers = Object.assign({}, opts.headers, {
+      "Authorization": "Bearer " + token
+    });
+    if (opts.body && !headers["Content-Type"]){
+      headers["Content-Type"] = "application/json";
+    }
+    const res = await fetch("https://api.spotify.com/v1" + path, Object.assign({}, opts, { headers }));
+    if (res.status === 204) return null;
+    if (!res.ok){
+      const text = await res.text();
+      throw new Error("spotify_api_error " + res.status + " " + text);
+    }
+    const ct = res.headers.get("content-type") || "";
+    return ct.includes("application/json") ? res.json() : null;
+  }
+
+  /* ============ PINS (localStorage) ============ */
+  const CATEGORIES = ["Pop","Clásica","Relax","Farma","Crimen","Negocios","Historia","Deportes","Tecnología","General"];
+  let catTargetItem = null;
+
+  function getPins(){
+    return JSON.parse(localStorage.getItem(LS_PINS) || "{}");
+  }
+  function savePins(pins){
+    localStorage.setItem(LS_PINS, JSON.stringify(pins));
+  }
+
+  function openCategoryPicker(item){
+    catTargetItem = item;
+    const pins = getPins();
+    const current = pins[item.uri] ? pins[item.uri].category : null;
+    document.getElementById("cat-modal-title").textContent = current ? "Cambiar de grupo" : "Añadir a un grupo";
+    document.getElementById("cat-modal-sub").textContent = item.name;
+    document.getElementById("cat-grid").innerHTML = CATEGORIES.map(function(cat){
+      return '<button class="cat-option' + (current === cat ? " current" : "") + '" data-cat="' + escAttr(cat) + '">' + esc(cat) + '</button>';
+    }).join("");
+    document.getElementById("cat-remove").style.display = current ? "block" : "none";
+    document.getElementById("category-modal").classList.add("visible");
+  }
+
+  function closeCategoryModal(){
+    document.getElementById("category-modal").classList.remove("visible");
+    catTargetItem = null;
+  }
+
+  document.getElementById("cat-grid").addEventListener("click", function(e){
+    const btn = e.target.closest("[data-cat]");
+    if (!btn || !catTargetItem) return;
+    const pins = getPins();
+    pins[catTargetItem.uri] = Object.assign({}, catTargetItem, { category: btn.getAttribute("data-cat") });
+    savePins(pins);
+    closeCategoryModal();
+    render();
+  });
+  document.getElementById("cat-remove").addEventListener("click", function(){
+    if (!catTargetItem) return;
+    const pins = getPins();
+    delete pins[catTargetItem.uri];
+    savePins(pins);
+    closeCategoryModal();
+    render();
+  });
+  document.getElementById("cat-modal-close").addEventListener("click", closeCategoryModal);
+  document.getElementById("category-modal").addEventListener("click", function(e){
+    if (e.target.id === "category-modal") closeCategoryModal();
+  });
+
+  /* ============ STATE ============ */
+  let library = { playlists: [], shows: [] };
+  let activeTab = "all";
+  let searchQuery = "";
+  let deviceId = null;
+  let player = null;
+  let currentState = null;
+  let progressTimer = null;
+
+  /* ============ LOAD LIBRARY ============ */
+  async function loadLibrary(){
+    const playlists = [];
+    let url = "/me/playlists?limit=50";
+    while (url){
+      const data = await spotifyFetch(url.replace("https://api.spotify.com/v1", ""));
+      data.items.forEach(function(p){
+        if (!p) return;
+        playlists.push({
+          uri: p.uri,
+          id: p.id,
+          type: "playlist",
+          name: p.name,
+          owner: p.owner ? p.owner.display_name : "",
+          image: p.images && p.images[0] ? p.images[0].url : ""
+        });
+      });
+      url = data.next;
+    }
+
+    const shows = [];
+    let surl = "/me/shows?limit=50";
+    while (surl){
+      const data = await spotifyFetch(surl.replace("https://api.spotify.com/v1", ""));
+      data.items.forEach(function(entry){
+        const s = entry.show;
+        if (!s) return;
+        shows.push({
+          uri: s.uri,
+          id: s.id,
+          type: "podcast",
+          name: s.name,
+          owner: s.publisher || "",
+          image: s.images && s.images[0] ? s.images[0].url : ""
+        });
+      });
+      surl = data.next;
+    }
+
+    library = { playlists: playlists, shows: shows };
+    document.getElementById("library-loading").style.display = "none";
+    render();
+  }
+
+  /* ============ RENDER ============ */
+  function allItems(){
+    return library.playlists.concat(library.shows);
+  }
+  function filteredItems(){
+    let items = allItems();
+    if (searchQuery){
+      const q = searchQuery.toLowerCase();
+      items = items.filter(function(i){ return i.name.toLowerCase().indexOf(q) !== -1; });
+    }
+    return items;
+  }
+
+  function buildTabs(){
+    const tabs = ['<button class="tab-btn active" data-tab="all">Todo</button>']
+      .concat(CATEGORIES.map(function(cat){
+        return '<button class="tab-btn" data-tab="' + escAttr(cat) + '">' + esc(cat) + '</button>';
+      }));
+    document.getElementById("tabs").innerHTML = tabs.join("");
+    document.querySelectorAll(".tab-btn").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        document.querySelectorAll(".tab-btn").forEach(function(b){ b.classList.remove("active"); });
+        btn.classList.add("active");
+        activeTab = btn.getAttribute("data-tab");
+        render();
+      });
+    });
+  }
+
+  function matchesFilter(item){
+    if (activeTab !== "all" && item.category !== activeTab) return false;
+    if (searchQuery && item.name.toLowerCase().indexOf(searchQuery.toLowerCase()) === -1) return false;
+    return true;
+  }
+
+  function cardHTML(item, small){
+    const pins = getPins();
+    const isPinned = !!pins[item.uri];
+    const isPlaying = currentState && !currentState.paused && currentState.contextUri === item.uri;
+    const flagClass = item.type === "podcast" ? "type-flag podcast" : "type-flag";
+    const flagText = item.type === "podcast" ? "Podcast" : "Playlist";
+    if (small){
+      return (
+        '<div class="row" data-uri="' + escAttr(item.uri) + '">' +
+          '<img src="' + escAttr(item.image) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
+          '<div style="min-width:0;flex:1;">' +
+            '<div class="name">' + esc(item.name) + '</div>' +
+            '<div class="owner">' + flagText + (item.owner ? " · " + esc(item.owner) : "") + '</div>' +
+          '</div>' +
+          '<button class="pin-toggle' + (isPinned ? " pinned" : "") + '" data-action="pin" aria-label="Fijar como acceso directo">' + (isPinned ? "★" : "☆") + '</button>' +
+          '<button class="row-play" data-action="play" aria-label="Reproducir">' +
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' +
+          '</button>' +
+        '</div>'
+      );
+    }
+    return (
+      '<div class="card' + (isPlaying ? " playing" : "") + '" data-uri="' + escAttr(item.uri) + '">' +
+        '<div class="art-wrap">' +
+          '<img src="' + escAttr(item.image) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
+          '<div class="vinyl"><div class="vinyl-disc"></div></div>' +
+          '<span class="' + flagClass + '">' + flagText + '</span>' +
+          '<button class="pin-toggle pinned" data-action="pin" aria-label="Cambiar grupo o quitar">★</button>' +
+          '<button class="play-btn" data-action="play" aria-label="Reproducir">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' +
+          '</button>' +
+        '</div>' +
+        '<div class="meta">' +
+          '<div class="name">' + esc(item.name) + '</div>' +
+          '<div class="owner">' + (item.owner ? esc(item.owner) : "&nbsp;") + '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function esc(s){ return (s || "").replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function escAttr(s){ return esc(s); }
+
+  function render(){
+    const pins = getPins();
+    const allPinned = Object.values(pins);
+    const pinnedItems = allPinned.filter(matchesFilter);
+    const favGrid = document.getElementById("favorites-grid");
+    const favEmpty = document.getElementById("favorites-empty");
+    document.getElementById("fav-count").textContent = pinnedItems.length ? pinnedItems.length + " fijados" : "";
+    if (pinnedItems.length === 0){
+      favGrid.innerHTML = "";
+      favEmpty.textContent = allPinned.length === 0
+        ? "Todavía no has fijado nada. Marca la ⭐ de cualquier playlist o podcast de abajo para elegir en qué grupo guardarlo."
+        : "No tienes nada en este grupo todavía.";
+      favEmpty.style.display = "block";
+    } else {
+      favEmpty.style.display = "none";
+      let html = "";
+      CATEGORIES.forEach(function(cat){
+        const group = pinnedItems.filter(function(i){ return i.category === cat; });
+        if (group.length === 0) return;
+        html += '<div class="group-head"><span class="group-name">' + esc(cat) + '</span>' +
+                '<span class="group-rule"></span>' +
+                '<span class="group-count">' + group.length + '</span></div>';
+        html += '<div class="grid">' + group.map(function(i){ return cardHTML(i, false); }).join("") + '</div>';
+      });
+      favGrid.innerHTML = html;
+    }
+
+    const items = filteredItems();
+    document.getElementById("lib-count").textContent = items.length + (items.length === 1 ? " elemento" : " elementos");
+    document.getElementById("library-list").innerHTML = items.map(function(i){ return cardHTML(i, true); }).join("");
+  }
+
+  document.addEventListener("click", function(e){
+    const actionEl = e.target.closest("[data-action]");
+    if (!actionEl) return;
+    const wrap = e.target.closest("[data-uri]");
+    if (!wrap) return;
+    const uri = wrap.getAttribute("data-uri");
+    const item = allItems().concat(Object.values(getPins())).find(function(i){ return i.uri === uri; });
+    if (!item) return;
+    if (actionEl.getAttribute("data-action") === "pin"){
+      openCategoryPicker(item);
+    } else if (actionEl.getAttribute("data-action") === "play"){
+      playItem(item);
+    }
+  });
+
+  document.getElementById("search-input").addEventListener("input", function(e){
+    searchQuery = e.target.value;
+    render();
+  });
+
+  /* ============ DEVICES ============ */
+  let targetDeviceId = null;
+  let targetDeviceName = "Este navegador";
+  let elementActivated = false;
+
+  function updateDeviceButton(){
+    document.getElementById("device-btn-label").textContent = targetDeviceName;
+  }
+
+  function activeDeviceId(){
+    return targetDeviceId || deviceId;
+  }
+
+  async function activateIfNeeded(){
+    if (elementActivated || !player) return;
+    if (typeof player.activateElement !== "function") { elementActivated = true; return; }
+    try{
+      await player.activateElement();
+      elementActivated = true;
+    } catch(err){
+      console.error(err);
+    }
+  }
+
+  function deviceIcon(type){
+    const t = (type || "").toLowerCase();
+    if (t === "smartphone") return "📱";
+    if (t === "speaker") return "🔊";
+    if (t === "tv") return "📺";
+    if (t === "castvideo" || t === "castaudio") return "📡";
+    return "💻";
+  }
+
+  async function openDeviceModal(){
+    const list = document.getElementById("device-list");
+    list.innerHTML = '<div class="modal-empty">Buscando dispositivos…</div>';
+    document.getElementById("device-modal").classList.add("visible");
+    try{
+      const data = await spotifyFetch("/me/player/devices");
+      const devices = (data && data.devices) ? data.devices : [];
+      const current = activeDeviceId();
+      if (devices.length === 0){
+        list.innerHTML = '<div class="modal-empty">No se han encontrado dispositivos. Abre la app de Spotify en el móvil o el ordenador y vuelve a intentarlo.</div>';
+        return;
+      }
+      list.innerHTML = devices.map(function(d){
+        const isCurrent = d.id === current;
+        const isThis = d.id === deviceId;
+        return (
+          '<button class="device-row' + (isCurrent ? " current" : "") + '" data-device="' + escAttr(d.id) + '" data-name="' + escAttr(d.name) + '">' +
+            '<span class="d-icon">' + deviceIcon(d.type) + '</span>' +
+            '<span style="min-width:0;">' +
+              '<span class="d-name" style="display:block;">' + esc(d.name) + (isThis ? " (esta ventana)" : "") + '</span>' +
+              '<span class="d-type" style="display:block;">' + esc(d.type || "") + '</span>' +
+            '</span>' +
+            (isCurrent ? '<span class="d-mark">Activo</span>' : '') +
+          '</button>'
+        );
+      }).join("");
+    } catch(err){
+      console.error(err);
+      list.innerHTML = '<div class="modal-empty">No se pudo consultar la lista de dispositivos.</div>';
+    }
+  }
+
+  function closeDeviceModal(){
+    document.getElementById("device-modal").classList.remove("visible");
+  }
+
+  document.getElementById("device-btn").addEventListener("click", openDeviceModal);
+  document.getElementById("device-modal-close").addEventListener("click", closeDeviceModal);
+  document.getElementById("device-modal").addEventListener("click", function(e){
+    if (e.target.id === "device-modal") closeDeviceModal();
+  });
+  document.getElementById("device-list").addEventListener("click", async function(e){
+    const row = e.target.closest("[data-device]");
+    if (!row) return;
+    targetDeviceId = row.getAttribute("data-device");
+    targetDeviceName = targetDeviceId === deviceId ? "Este navegador" : row.getAttribute("data-name");
+    updateDeviceButton();
+    closeDeviceModal();
+    try{
+      await spotifyFetch("/me/player", {
+        method: "PUT",
+        body: JSON.stringify({ device_ids: [targetDeviceId], play: false })
+      });
+      showToast("La reproducción sonará en " + targetDeviceName + ".");
+    } catch(err){
+      console.error(err);
+      showToast("No se pudo cambiar de dispositivo.");
+    }
+  });
+
+  /* ============ FULL SCREEN NOW PLAYING ============ */
+  function openFullPlayer(){
+    if (!document.getElementById("now-playing").classList.contains("visible")) return;
+    syncFullPlayer();
+    document.getElementById("np-full").classList.add("visible");
+    document.body.style.overflow = "hidden";
+    history.pushState({ npFull: true }, "");
+  }
+  function closeFullPlayer(){
+    const wasOpen = fullPlayerOpen();
+    document.getElementById("np-full").classList.remove("visible");
+    document.body.style.overflow = "";
+    if (wasOpen && history.state && history.state.npFull) history.back();
+  }
+  window.addEventListener("popstate", function(){
+    if (fullPlayerOpen()){
+      document.getElementById("np-full").classList.remove("visible");
+      document.body.style.overflow = "";
+    }
+  });
+  function fullPlayerOpen(){
+    return document.getElementById("np-full").classList.contains("visible");
+  }
+
+  function syncFullPlayer(){
+    document.getElementById("npf-track").textContent = document.getElementById("np-track").textContent;
+    document.getElementById("npf-artist").textContent = document.getElementById("np-artist").textContent;
+    document.getElementById("npf-art").src = document.getElementById("np-art").src;
+    document.getElementById("npf-play-icon").innerHTML = document.getElementById("np-play-icon").innerHTML;
+    document.getElementById("npf-elapsed").textContent = document.getElementById("np-elapsed").textContent;
+    document.getElementById("npf-total").textContent = document.getElementById("np-total").textContent;
+    document.getElementById("npf-bar-fill").style.width = document.getElementById("np-bar-fill").style.width;
+    document.getElementById("npf-where").textContent = "Sonando en " + targetDeviceName;
+  }
+
+  document.getElementById("np-art").addEventListener("click", openFullPlayer);
+  document.querySelector(".np-meta").addEventListener("click", openFullPlayer);
+  document.getElementById("npf-min").addEventListener("click", closeFullPlayer);
+
+  document.getElementById("npf-playpause").addEventListener("click", function(){
+    document.getElementById("np-playpause").click();
+  });
+  document.getElementById("npf-next").addEventListener("click", function(){
+    document.getElementById("np-next").click();
+  });
+  document.getElementById("npf-prev").addEventListener("click", function(){
+    document.getElementById("np-prev").click();
+  });
+  document.getElementById("npf-bar").addEventListener("click", function(e){
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const bar = document.getElementById("np-bar");
+    const barRect = bar.getBoundingClientRect();
+    bar.dispatchEvent(new MouseEvent("click", {
+      clientX: barRect.left + barRect.width * ratio,
+      bubbles: false
+    }));
+  });
+
+  /* ============ PLAYBACK ============ */
+  function showToast(msg){
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("visible");
+    setTimeout(function(){ t.classList.remove("visible"); }, 2600);
+  }
+
+  let shuffleOn = false;
+  let currentModalShow = null;
+
+  document.getElementById("shuffle-track").addEventListener("click", toggleShuffle);
+  document.getElementById("shuffle-track").addEventListener("keydown", function(e){
+    if (e.key === "Enter" || e.key === " "){ e.preventDefault(); toggleShuffle(); }
+  });
+  function toggleShuffle(){
+    shuffleOn = !shuffleOn;
+    const track = document.getElementById("shuffle-track");
+    track.classList.toggle("on", shuffleOn);
+    track.setAttribute("aria-checked", String(shuffleOn));
+  }
+
+  function closeModal(){
+    document.getElementById("episode-modal").classList.remove("visible");
+  }
+  document.getElementById("modal-close").addEventListener("click", closeModal);
+  document.getElementById("episode-modal").addEventListener("click", function(e){
+    if (e.target.id === "episode-modal") closeModal();
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape"){
+      if (fullPlayerOpen()){ closeFullPlayer(); return; }
+      closeModal(); closeCategoryModal(); closeDeviceModal();
+    }
+  });
+  document.getElementById("modal-filter-unplayed").addEventListener("change", function(){
+    if (currentModalShow) renderEpisodeList(currentModalShow);
+  });
+
+  function formatEpDate(iso){
+    if (!iso) return "";
+    const parts = iso.split("-");
+    if (parts.length < 3) return iso;
+    return parts[2] + "/" + parts[1] + "/" + parts[0];
+  }
+  function formatEpDuration(ms){
+    if (!ms) return "";
+    return Math.round(ms / 60000) + " min";
+  }
+
+  async function openEpisodePicker(show){
+    currentModalShow = { info: show, episodes: [] };
+    document.getElementById("modal-show-name").textContent = show.name;
+    document.getElementById("modal-filter-unplayed").checked = false;
+    document.getElementById("modal-episode-list").innerHTML = '<div class="modal-empty">Cargando episodios…</div>';
+    document.getElementById("episode-modal").classList.add("visible");
+    try{
+      const data = await spotifyFetch("/shows/" + show.id + "/episodes?limit=50");
+      currentModalShow.episodes = (data.items || []).filter(Boolean).map(function(ep){
+        const rp = ep.resume_point || {};
+        return {
+          uri: ep.uri,
+          name: ep.name,
+          date: ep.release_date,
+          duration_ms: ep.duration_ms,
+          fully_played: !!rp.fully_played,
+          resume_ms: rp.resume_position_ms || 0
+        };
+      });
+      renderEpisodeList(currentModalShow);
+    } catch(err){
+      console.error(err);
+      document.getElementById("modal-episode-list").innerHTML = '<div class="modal-empty">No se pudieron cargar los episodios. Cierra y vuelve a intentarlo.</div>';
+    }
+  }
+
+  function renderEpisodeList(modalShow){
+    const onlyUnplayed = document.getElementById("modal-filter-unplayed").checked;
+    const list = onlyUnplayed
+      ? modalShow.episodes.filter(function(e){ return !e.fully_played; })
+      : modalShow.episodes;
+    const container = document.getElementById("modal-episode-list");
+    if (list.length === 0){
+      container.innerHTML = '<div class="modal-empty">' +
+        (onlyUnplayed ? "No hay episodios sin escuchar en este podcast." : "Este podcast no tiene episodios disponibles.") +
+        '</div>';
+      return;
+    }
+    container.innerHTML = list.map(function(ep){
+      let badge = "";
+      if (ep.fully_played) badge = '<span class="ep-badge">Escuchado</span>';
+      else if (ep.resume_ms > 0) badge = '<span class="ep-badge">A medias</span>';
+      return (
+        '<div class="episode-row" data-ep-uri="' + escAttr(ep.uri) + '">' +
+          '<div style="min-width:0;">' +
+            '<div class="ep-name">' + esc(ep.name) + '</div>' +
+            '<div class="ep-meta"><span>' + esc(formatEpDate(ep.date)) + '</span><span>' + esc(formatEpDuration(ep.duration_ms)) + '</span>' + badge + '</div>' +
+          '</div>' +
+          '<button class="ep-play" aria-label="Reproducir episodio"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>' +
+        '</div>'
+      );
+    }).join("");
+  }
+
+  document.getElementById("modal-episode-list").addEventListener("click", function(e){
+    const row = e.target.closest(".episode-row");
+    if (!row || !currentModalShow) return;
+    const uri = row.getAttribute("data-ep-uri");
+    const ep = currentModalShow.episodes.find(function(x){ return x.uri === uri; });
+    if (ep) playEpisode(ep);
+  });
+
+  async function playEpisode(ep){
+    const target = activeDeviceId();
+    if (!target){
+      showToast("El reproductor todavía se está conectando, prueba en unos segundos.");
+      return;
+    }
+    await activateIfNeeded();
+    try{
+      await spotifyFetch("/me/player/play?device_id=" + target, {
+        method: "PUT",
+        body: JSON.stringify({ uris: [ep.uri], position_ms: ep.resume_ms || 0 })
+      });
+      closeModal();
+    } catch(err){
+      console.error(err);
+      showToast("No se pudo reproducir el episodio.");
+    }
+  }
+
+  async function playItem(item){
+    const target = activeDeviceId();
+    if (!target){
+      showToast("El reproductor todavía se está conectando, prueba en unos segundos.");
+      return;
+    }
+    if (item.type === "podcast"){
+      openEpisodePicker(item);
+      return;
+    }
+    await activateIfNeeded();
+    try{
+      await spotifyFetch("/me/player/shuffle?state=" + (shuffleOn ? "true" : "false") + "&device_id=" + target, {
+        method: "PUT"
+      });
+      await spotifyFetch("/me/player/play?device_id=" + target, {
+        method: "PUT",
+        body: JSON.stringify({ context_uri: item.uri })
+      });
+    } catch(err){
+      console.error(err);
+      showToast("No se pudo iniciar la reproducción. Prueba a elegir otro dispositivo arriba.");
+    }
+  }
+
+  function formatTime(ms){
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function updateNowPlayingUI(state){
+    const bar = document.getElementById("now-playing");
+    if (!state || !state.track_window || !state.track_window.current_track){
+      return;
+    }
+    bar.classList.add("visible");
+    const track = state.track_window.current_track;
+    document.getElementById("np-track").textContent = track.name;
+    document.getElementById("np-artist").textContent = track.artists.map(function(a){ return a.name; }).join(", ");
+    const art = track.album && track.album.images && track.album.images[0] ? track.album.images[0].url : "";
+    document.getElementById("np-art").src = art;
+    document.getElementById("np-play-icon").innerHTML = state.paused
+      ? '<path d="M8 5v14l11-7z"/>'
+      : '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+    document.getElementById("np-elapsed").textContent = formatTime(state.position);
+    document.getElementById("np-total").textContent = formatTime(state.duration);
+    const pct = state.duration ? (state.position / state.duration) * 100 : 0;
+    document.getElementById("np-bar-fill").style.width = pct + "%";
+
+    currentState = {
+      paused: state.paused,
+      contextUri: state.context && state.context.uri
+    };
+    render();
+    if (fullPlayerOpen()) syncFullPlayer();
+
+    clearInterval(progressTimer);
+    if (!state.paused){
+      let pos = state.position;
+      const start = Date.now();
+      progressTimer = setInterval(function(){
+        const elapsed = pos + (Date.now() - start);
+        if (elapsed > state.duration) return;
+        document.getElementById("np-elapsed").textContent = formatTime(elapsed);
+        document.getElementById("np-bar-fill").style.width = ((elapsed / state.duration) * 100) + "%";
+        if (fullPlayerOpen()){
+          document.getElementById("npf-elapsed").textContent = formatTime(elapsed);
+          document.getElementById("npf-bar-fill").style.width = ((elapsed / state.duration) * 100) + "%";
+        }
+      }, 500);
+    }
+  }
+
+  function isRemote(){
+    return targetDeviceId && targetDeviceId !== deviceId;
+  }
+
+  async function remoteCommand(path, method){
+    try{
+      await spotifyFetch(path + (path.indexOf("?") === -1 ? "?" : "&") + "device_id=" + activeDeviceId(), { method: method || "POST" });
+    } catch(err){
+      console.error(err);
+      showToast("No se pudo enviar la orden al dispositivo.");
+    }
+  }
+
+  document.getElementById("np-playpause").addEventListener("click", async function(){
+    if (isRemote()){
+      const paused = document.getElementById("np-play-icon").innerHTML.indexOf("M8 5v14") !== -1;
+      await remoteCommand(paused ? "/me/player/play" : "/me/player/pause", "PUT");
+      setTimeout(pollRemoteState, 400);
+      return;
+    }
+    if (player) player.togglePlay();
+  });
+  document.getElementById("np-next").addEventListener("click", async function(){
+    if (isRemote()){ await remoteCommand("/me/player/next", "POST"); setTimeout(pollRemoteState, 600); return; }
+    if (player) player.nextTrack();
+  });
+  document.getElementById("np-prev").addEventListener("click", async function(){
+    if (isRemote()){ await remoteCommand("/me/player/previous", "POST"); setTimeout(pollRemoteState, 600); return; }
+    if (player) player.previousTrack();
+  });
+  document.getElementById("np-bar").addEventListener("click", function(e){
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    if (isRemote()){
+      const total = parseTimeLabel(document.getElementById("np-total").textContent);
+      spotifyFetch("/me/player/seek?position_ms=" + Math.round(total * ratio) + "&device_id=" + activeDeviceId(), { method: "PUT" })
+        .then(function(){ setTimeout(pollRemoteState, 400); })
+        .catch(function(err){ console.error(err); });
+      return;
+    }
+    if (!player) return;
+    player.getCurrentState().then(function(state){
+      if (!state) return;
+      player.seek(state.duration * ratio);
+    });
+  });
+
+  function parseTimeLabel(label){
+    const parts = (label || "0:00").split(":");
+    return ((parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0)) * 1000;
+  }
+
+  let remoteTimer = null;
+  async function pollRemoteState(){
+    if (!isRemote()) return;
+    try{
+      const state = await spotifyFetch("/me/player?additional_types=track,episode");
+      if (!state || !state.item) return;
+      const bar = document.getElementById("now-playing");
+      bar.classList.add("visible");
+      const item = state.item;
+      document.getElementById("np-track").textContent = item.name;
+      document.getElementById("np-artist").textContent = item.artists
+        ? item.artists.map(function(a){ return a.name; }).join(", ")
+        : (item.show ? item.show.name : "");
+      const images = (item.album && item.album.images) || item.images || [];
+      document.getElementById("np-art").src = images[0] ? images[0].url : "";
+      document.getElementById("np-play-icon").innerHTML = state.is_playing
+        ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'
+        : '<path d="M8 5v14l11-7z"/>';
+      document.getElementById("np-elapsed").textContent = formatTime(state.progress_ms || 0);
+      document.getElementById("np-total").textContent = formatTime(item.duration_ms || 0);
+      document.getElementById("np-bar-fill").style.width =
+        (item.duration_ms ? ((state.progress_ms || 0) / item.duration_ms) * 100 : 0) + "%";
+      document.getElementById("np-device").textContent = targetDeviceName;
+      currentState = { paused: !state.is_playing, contextUri: state.context && state.context.uri };
+      render();
+      if (fullPlayerOpen()) syncFullPlayer();
+    } catch(err){
+      console.error(err);
+    }
+  }
+
+  function startRemotePolling(){
+    clearInterval(remoteTimer);
+    remoteTimer = setInterval(function(){
+      if (isRemote()) pollRemoteState();
+    }, 4000);
+  }
+
+  function initPlayer(){
+    window.onSpotifyWebPlaybackSDKReady = async function(){
+      const token = await getValidToken();
+      player = new Spotify.Player({
+        name: "LOCSPOT Web Player",
+        getOAuthToken: function(cb){
+          getValidToken().then(cb).catch(function(){ cb(token); });
+        },
+        volume: 0.75
+      });
+
+      player.addListener("ready", function(data){
+        deviceId = data.device_id;
+      });
+      player.addListener("not_ready", function(){
+        deviceId = null;
+      });
+      player.addListener("player_state_changed", function(state){
+        if (state && !isRemote()) updateNowPlayingUI(state);
+      });
+      player.addListener("autoplay_failed", function(){
+        showToast("El navegador ha bloqueado la reproducción. Vuelve a pulsar play.");
+      });
+      player.addListener("initialization_error", function(e){ console.error(e); });
+      player.addListener("authentication_error", function(e){ console.error(e); showToast("Sesión expirada, vuelve a conectar."); });
+      player.addListener("account_error", function(){
+        showToast("Esta cuenta no es Premium: el Web Playback SDK de Spotify solo reproduce con Premium.");
+      });
+
+      player.connect();
+    };
+    // If the SDK script already loaded before this listener was attached, trigger manually.
+    if (window.Spotify && window.Spotify.Player){
+      window.onSpotifyWebPlaybackSDKReady();
+    }
+  }
+
+  /* ============ BOOTSTRAP ============ */
+  async function boot(){
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get("code");
+    const err = urlParams.get("error");
+
+    if (err){
+      showOnboardError("Spotify devolvió un error al autorizar: " + err);
+      return;
+    }
+
+    if (code){
+      try{
+        await exchangeCodeForToken(code);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch(e){
+        console.error(e);
+        showOnboardError("No se pudo completar el login. Revisa el Client ID y vuelve a intentarlo.");
+        return;
+      }
+    }
+
+    if (CLIENT_ID && CLIENT_ID.trim()){
+      document.getElementById("step-client-id").style.display = "none";
+    } else {
+      const storedClientId = localStorage.getItem(LS_CLIENT_ID);
+      if (storedClientId) document.getElementById("client-id").value = storedClientId;
+    }
+
+    const tokens = JSON.parse(localStorage.getItem(LS_TOKENS) || "null");
+    if (tokens){
+      document.getElementById("onboarding").style.display = "none";
+      document.getElementById("app").classList.add("visible");
+      buildTabs();
+      updateDeviceButton();
+      startRemotePolling();
+      try{
+        await loadLibrary();
+        initPlayer();
+      } catch(e){
+        console.error(e);
+        if (String(e).indexOf("401") !== -1 || String(e).indexOf("not_authenticated") !== -1){
+          localStorage.removeItem(LS_TOKENS);
+          document.getElementById("onboarding").style.display = "flex";
+          document.getElementById("app").classList.remove("visible");
+        }
+      }
+    }
+  }
+
+  document.getElementById("connect-btn").addEventListener("click", beginLogin);
+
+  if ("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("./sw.js").catch(function(err){
+        console.error("No se pudo registrar el service worker:", err);
+      });
+    });
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
