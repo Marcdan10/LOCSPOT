@@ -576,7 +576,9 @@
       <button class="modal-close" id="device-modal-close" aria-label="Cerrar">✕</button>
     </div>
     <p class="modal-sub">En el móvil, elige la app de Spotify si quieres seguir escuchando con la pantalla bloqueada.</p>
+    <div id="device-help"></div>
     <div id="device-list"></div>
+    <button class="cat-remove" id="device-refresh" style="border-color:var(--line);color:var(--ink-soft);">Volver a buscar dispositivos</button>
   </div>
 </div>
 
@@ -632,7 +634,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "1.0";
+  const APP_VERSION = "1.1";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -1101,23 +1103,25 @@
            (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
   }
 
+  function isPhoneDevice(d){
+    return (d.type || "").toLowerCase() === "smartphone";
+  }
+
   // En el móvil, el reproductor del navegador se suspende al bloquear la pantalla.
-  // Por eso buscamos la app de Spotify y la usamos como destino por defecto.
+  // Solo sirve la app de Spotify del propio teléfono: nunca un ordenador ni otro navegador.
   async function autoSelectMobileDevice(){
     if (!isMobileDevice() || targetDeviceId) return;
     try{
       const data = await spotifyFetch("/me/player/devices");
       const devices = (data && data.devices) ? data.devices : [];
-      const native = devices.filter(function(d){
-        return d.id !== deviceId && !d.is_restricted;
+      const phones = devices.filter(function(d){
+        return d.id !== deviceId && !d.is_restricted && isPhoneDevice(d);
       });
-      if (native.length === 0){
-        showToast("Abre la app de Spotify en el móvil para que la música no se corte al bloquear la pantalla.");
+      if (phones.length === 0){
+        showToast("Abre la app de Spotify en este móvil y pulsa el botón de dispositivo para que no se corte el sonido.");
         return;
       }
-      const phone = native.filter(function(d){ return (d.type || "").toLowerCase() === "smartphone"; });
-      const chosen = (phone.find(function(d){ return d.is_active; })) || phone[0] ||
-                     native.find(function(d){ return d.is_active; }) || native[0];
+      const chosen = phones.find(function(d){ return d.is_active; }) || phones[0];
       targetDeviceId = chosen.id;
       targetDeviceName = chosen.name;
       updateDeviceButton();
@@ -1148,23 +1152,42 @@
   }
 
   async function openDeviceModal(){
-    const list = document.getElementById("device-list");
-    list.innerHTML = '<div class="modal-empty">Buscando dispositivos…</div>';
     document.getElementById("device-modal").classList.add("visible");
+    await loadDeviceList();
+  }
+
+  async function loadDeviceList(){
+    const list = document.getElementById("device-list");
+    const help = document.getElementById("device-help");
+    help.innerHTML = "";
+    list.innerHTML = '<div class="modal-empty">Buscando dispositivos…</div>';
     try{
       const data = await spotifyFetch("/me/player/devices");
       const devices = (data && data.devices) ? data.devices : [];
       const current = activeDeviceId();
+
+      if (isMobileDevice() && !devices.some(function(d){ return d.id !== deviceId && isPhoneDevice(d); })){
+        help.innerHTML =
+          '<div style="background:#F4E3DC;border:1px solid var(--rust);color:var(--rust);' +
+          'border-radius:6px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:14px;">' +
+          'No aparece la app de Spotify de este móvil. Ábrela, dale al play un segundo y vuelve aquí: ' +
+          'es la única opción que sigue sonando con la pantalla bloqueada.' +
+          '</div>';
+      }
+
       if (devices.length === 0){
-        list.innerHTML = '<div class="modal-empty">No se han encontrado dispositivos. Abre la app de Spotify en el móvil o el ordenador y vuelve a intentarlo.</div>';
+        list.innerHTML = '<div class="modal-empty">No se han encontrado dispositivos. Abre la app de Spotify y vuelve a buscar.</div>';
         return;
       }
       list.innerHTML = devices.map(function(d){
         const isCurrent = d.id === current;
         const isThis = d.id === deviceId;
-        const warn = (isThis && isMobileDevice())
-          ? '<span class="d-type" style="display:block;color:#A64B2A;">Se corta al bloquear la pantalla</span>'
-          : '';
+        let warn = "";
+        if (isThis && isMobileDevice()){
+          warn = '<span class="d-type" style="display:block;color:#A64B2A;">Se corta al bloquear la pantalla</span>';
+        } else if (isMobileDevice() && !isPhoneDevice(d)){
+          warn = '<span class="d-type" style="display:block;color:#A64B2A;">Sonará en ese otro aparato, no aquí</span>';
+        }
         return (
           '<button class="device-row' + (isCurrent ? " current" : "") + '" data-device="' + escAttr(d.id) + '" data-name="' + escAttr(d.name) + '">' +
             '<span class="d-icon">' + deviceIcon(d.type) + '</span>' +
@@ -1182,6 +1205,8 @@
       list.innerHTML = '<div class="modal-empty">No se pudo consultar la lista de dispositivos.</div>';
     }
   }
+
+  document.getElementById("device-refresh").addEventListener("click", loadDeviceList);
 
   function closeDeviceModal(){
     document.getElementById("device-modal").classList.remove("visible");
@@ -1403,8 +1428,9 @@
   }
 
   function warnIfBrowserOnMobile(){
-    if (isMobileDevice() && !isRemote()){
-      showToast("Suena en el navegador: se cortará al bloquear la pantalla. Cambia de dispositivo arriba.");
+    if (!isMobileDevice()) return;
+    if (!isRemote()){
+      showToast("Suena en el navegador: se cortará al bloquear la pantalla. Abre la app de Spotify y cámbialo arriba.");
     }
   }
 
