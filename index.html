@@ -153,6 +153,11 @@
   .brand{ display:flex; align-items:baseline; gap:10px; }
   .brand h1{ font-size:26px; }
   .brand .tag{ font-size:12px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; letter-spacing:0.04em; }
+  .version-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.06em;
+    background:var(--cream-2); color:var(--ink-soft); border:1px solid var(--line);
+    padding:2px 7px; border-radius:10px; flex:none;
+  }
 
   .search-wrap{ flex:1; min-width:220px; max-width:340px; position:relative; }
   .search-wrap input{
@@ -444,7 +449,7 @@
 <!-- ===================== ONBOARDING ===================== -->
 <div id="onboarding">
   <div class="onboard-card">
-    <div class="eyebrow">LOCSPOT · panel personal de Spotify</div>
+    <div class="eyebrow">LOCSPOT <span id="onboard-version"></span> · panel personal de Spotify</div>
     <h1>Tu Spotify, a mano</h1>
     <p>Accesos directos a tus playlists y podcasts favoritos, con reproducción real dentro de esta misma página. Necesita conectarse a tu cuenta de Spotify Premium.</p>
 
@@ -474,6 +479,7 @@
       <div class="brand">
         <h1>LOCSPOT</h1>
         <span class="tag">tu biblioteca, sin ruido</span>
+        <span class="version-badge" id="app-version"></span>
       </div>
       <div class="search-wrap">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -625,6 +631,9 @@
      ===================================================================== */
   const CLIENT_ID = "";
 
+  /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
+  const APP_VERSION = "1.0";
+
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
   const SCOPES = [
@@ -646,6 +655,9 @@
   const LS_TOKENS = "locspot_tokens";
   const LS_PINS = "locspot_pins";
   const SS_VERIFIER = "locspot_pkce_verifier";
+
+  document.getElementById("app-version").textContent = "v" + APP_VERSION;
+  document.getElementById("onboard-version").textContent = "v" + APP_VERSION;
 
   document.getElementById("redirect-display").textContent = REDIRECT_URI;
   document.getElementById("copy-redirect").addEventListener("click", function(){

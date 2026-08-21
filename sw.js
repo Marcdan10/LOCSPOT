@@ -1,4 +1,7 @@
-const CACHE = "locspot-v4";
+/* Sube este número junto con APP_VERSION en index.html: al cambiar,
+   el navegador descarta la caché antigua y coge la versión nueva. */
+const VERSION = "1.0";
+const CACHE = "locspot-" + VERSION;
 const SHELL = [
   "./",
   "./index.html",
