@@ -796,7 +796,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "2.1";
+  const APP_VERSION = "2.3";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -1437,6 +1437,28 @@
   let currentTracks = { item: null, tracks: [] };
   const TRACKS_MAX = 300;
 
+  async function fetchPlaylistPage(playlistId, offset, useFields){
+    const fields = useFields
+      ? "&fields=total,items(track(name,uri,duration_ms,artists(name)))"
+      : "";
+    return await spotifyFetch("/playlists/" + playlistId + "/tracks?limit=100&offset=" + offset +
+      "&market=from_token" + fields);
+  }
+
+  function trackErrorMessage(err, item){
+    const s = String(err);
+    if (s.indexOf("404") !== -1){
+      const deSpotify = item && item.owner && /spotify/i.test(item.owner);
+      return deSpotify
+        ? "Spotify no permite a las aplicaciones externas leer el contenido de sus propias listas (Discover Weekly, Daily Mix, editoriales). Puedes reproducirla con el botón de play, pero no ver las canciones."
+        : "Spotify no da acceso al contenido de esta lista. Si es una lista creada por Spotify, es su limitación; con el botón de play sí se reproduce.";
+    }
+    if (s.indexOf("401") !== -1) return "La sesión ha caducado. Recarga LOCSPOT para volver a entrar.";
+    if (s.indexOf("403") !== -1) return "Tu cuenta no tiene permiso para leer esta lista.";
+    if (s.indexOf("429") !== -1) return "Spotify está limitando las peticiones. Espera un momento y vuelve a intentarlo.";
+    return "No se pudieron cargar las canciones. " + s.slice(0, 120);
+  }
+
   async function openTrackPicker(item){
     currentTracks = { item: item, tracks: [] };
     document.getElementById("tracks-modal-name").textContent = item.name;
@@ -1444,15 +1466,27 @@
     document.getElementById("tracks-search").value = "";
     document.getElementById("tracks-list").innerHTML = '<div class="modal-empty">Cargando canciones…</div>';
     document.getElementById("tracks-modal").classList.add("visible");
+
+    const playlistId = item.uri.split(":").pop();
+    let useFields = true;
     try{
-      const playlistId = item.uri.split(":").pop();
       let tracks = [];
       let offset = 0;
       while (tracks.length < TRACKS_MAX){
-        const data = await spotifyFetch("/playlists/" + playlistId + "/tracks?limit=100&offset=" + offset +
-          "&fields=total,items(track(name,uri,duration_ms,artists(name)))");
-        const items = (data && data.items) ? data.items : [];
-        items.forEach(function(row){
+        let data;
+        try{
+          data = await fetchPlaylistPage(playlistId, offset, useFields);
+        } catch(err){
+          // Algunas listas rechazan el filtro de campos: reintentamos sin él.
+          if (useFields && offset === 0){
+            useFields = false;
+            data = await fetchPlaylistPage(playlistId, offset, false);
+          } else {
+            throw err;
+          }
+        }
+        const rows = (data && data.items) ? data.items : [];
+        rows.forEach(function(row){
           if (row.track && row.track.uri && row.track.uri.indexOf("spotify:track:") === 0){
             tracks.push({
               name: row.track.name,
@@ -1463,17 +1497,24 @@
           }
         });
         offset += 100;
-        if (!data || !data.items || data.items.length < 100 || offset >= (data.total || 0)) break;
+        if (rows.length < 100 || offset >= (data && data.total ? data.total : 0)) break;
       }
       currentTracks.tracks = tracks;
       if (tracks.length === TRACKS_MAX){
         document.getElementById("tracks-modal-sub").textContent =
-          "Mostrando las primeras " + TRACKS_MAX + " canciones. Usa el buscador para el resto no cargado.";
+          "Mostrando las primeras " + TRACKS_MAX + " canciones.";
       }
       renderTrackList();
     } catch(err){
       console.error(err);
-      document.getElementById("tracks-list").innerHTML = '<div class="modal-empty">No se pudieron cargar las canciones.</div>';
+      document.getElementById("tracks-list").innerHTML =
+        '<div class="modal-empty">' + esc(trackErrorMessage(err, item)) +
+        '</div><button class="cat-remove" id="tracks-play-anyway" style="margin-top:12px;">Reproducir la lista igualmente</button>';
+      const b = document.getElementById("tracks-play-anyway");
+      if (b) b.addEventListener("click", function(){
+        closeTracksModal();
+        playItem(item);
+      });
     }
   }
 
@@ -1599,6 +1640,11 @@
     radioAudio.removeAttribute("src");
     try { radioAudio.load(); } catch(e){}
     currentRadio = null;
+    const art = document.getElementById("np-art");
+    art.removeAttribute("data-radio-logo");
+    art.onload = null;
+    art.onerror = null;
+    art.style.visibility = "visible";
   }
 
   async function playRadio(st){
@@ -1624,7 +1670,16 @@
     document.getElementById("now-playing").classList.add("visible");
     document.getElementById("np-track").textContent = st.name;
     document.getElementById("np-artist").textContent = estado;
-    document.getElementById("np-art").src = st.logo;
+    const art = document.getElementById("np-art");
+    if (art.getAttribute("data-radio-logo") !== st.name){
+      art.removeAttribute("src");
+      art.style.visibility = "hidden";
+      art.onload = function(){ art.style.visibility = "visible"; };
+      art.onerror = function(){ art.style.visibility = "hidden"; };
+      art.src = st.logo;
+      art.setAttribute("data-radio-logo", st.name);
+    }
+    document.getElementById("np-device").textContent = "En este aparato";
     document.getElementById("np-play-icon").innerHTML = radioAudio.paused
       ? '<path d="M8 5v14l11-7z"/>'
       : '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
@@ -2595,6 +2650,7 @@
   }
 
   function updateNowPlayingUI(state){
+    if (currentRadio) return;
     const bar = document.getElementById("now-playing");
     if (!state || !state.track_window || !state.track_window.current_track){
       return;
@@ -2703,6 +2759,8 @@
 
   let remoteTimer = null;
   async function pollRemoteState(){
+    // Con la radio sonando, Spotify no debe repintar la barra.
+    if (currentRadio) return;
     if (!isRemote()) return;
     try{
       const state = await spotifyFetch("/me/player?additional_types=track,episode");
@@ -2735,7 +2793,7 @@
   function startRemotePolling(){
     clearInterval(remoteTimer);
     remoteTimer = setInterval(function(){
-      if (isRemote()) pollRemoteState();
+      if (!currentRadio && isRemote()) pollRemoteState();
     }, 4000);
   }
 
