@@ -317,6 +317,15 @@
   }
   .toast.visible{ opacity:1; }
 
+  #night-mode{
+    position:fixed; inset:0; z-index:80; background:#000;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    color:#2E2E2E; text-align:center; padding:24px;
+  }
+  #night-mode.visible{ display:flex; }
+  #night-countdown{ font-family:'IBM Plex Mono',monospace; font-size:26px; letter-spacing:0.05em; }
+  #night-hint{ font-size:11.5px; margin-top:14px; color:#1E1E1E; }
+
   #np-full{
     position:fixed; inset:0; z-index:60;
     background:var(--ink); color:var(--white);
@@ -406,6 +415,7 @@
   .device-btn:hover{ border-color:var(--ink-soft); color:var(--ink); }
   .device-btn:focus-visible{ outline:2px solid var(--ochre); outline-offset:2px; }
   .device-btn .dot{ width:7px; height:7px; border-radius:50%; background:var(--moss); flex:none; }
+  .device-btn.on{ border-color:var(--ochre); color:var(--rust); }
   .device-btn .label{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   .device-row{
@@ -490,6 +500,10 @@
         <span class="switch-track" id="shuffle-track" role="switch" aria-checked="false" aria-labelledby="shuffle-label" tabindex="0"><span class="switch-thumb"></span></span>
       </div>
       <button class="device-btn" id="device-btn"><span class="dot"></span><span class="label" id="device-btn-label">Este navegador</span></button>
+      <button class="device-btn" id="sleep-btn" aria-label="Temporizador">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <span class="label" id="sleep-btn-label">Apagado</span>
+      </button>
     </div>
     <nav class="tabs" id="tabs"></nav>
   </header>
@@ -619,6 +633,30 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="sleep-modal">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="sleep-modal-title">
+    <div class="modal-head">
+      <h3 id="sleep-modal-title">Apagar al cabo de…</h3>
+      <button class="modal-close" id="sleep-modal-close" aria-label="Cerrar">✕</button>
+    </div>
+    <p class="modal-sub">La música se pausará sola cuando pase el tiempo elegido.</p>
+    <div class="cat-grid" id="sleep-grid"></div>
+    <label class="filter-row" style="margin:16px 0 0;">
+      <input type="checkbox" id="sleep-night" checked>
+      Modo noche: pantalla en negro para que no se corte
+    </label>
+    <div id="sleep-warning" style="background:var(--cream-2);border:1px solid var(--line);color:var(--ink-soft);border-radius:6px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-top:12px;">
+      El modo noche mantiene la pantalla encendida pero totalmente en negro, que es lo que permite que el temporizador siga vivo. Deja el móvil boca abajo o a un lado y no verás luz. Al vencer, la música se pausa y el móvil se duerme solo. Sin el modo noche, si bloqueas la pantalla el temporizador no llegará a pausar.
+    </div>
+    <button class="cat-remove" id="sleep-cancel" style="display:none;">Cancelar el temporizador</button>
+  </div>
+</div>
+
+<div id="night-mode">
+  <div id="night-countdown">--:--</div>
+  <div id="night-hint">Toca para salir</div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
@@ -634,7 +672,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "1.1";
+  const APP_VERSION = "1.3";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -805,7 +843,7 @@
   }
 
   /* ============ PINS (localStorage) ============ */
-  const CATEGORIES = ["Pop","Clásica","Relax","Farma","Crimen","Negocios","Historia","Deportes","Tecnología","General"];
+  const CATEGORIES = ["Pop","Clásica","Relax","Farma","Crimen","Negocios","Historia","Deportes","Tecnología","Humor","General"];
   let catTargetItem = null;
 
   function getPins(){
@@ -1085,6 +1123,154 @@
     }, true);
   })();
 
+  /* ============ SLEEP TIMER ============ */
+  const SLEEP_OPTIONS = [5, 10, 20, 30, 45, 60];
+  let sleepEndsAt = null;
+  let sleepTimeout = null;
+  let sleepTick = null;
+
+  function updateSleepButton(){
+    const btn = document.getElementById("sleep-btn");
+    const label = document.getElementById("sleep-btn-label");
+    if (!sleepEndsAt){
+      btn.classList.remove("on");
+      label.textContent = "Apagado";
+      return;
+    }
+    btn.classList.add("on");
+    const left = Math.max(0, sleepEndsAt - Date.now());
+    const mins = Math.floor(left / 60000);
+    const secs = Math.floor((left % 60000) / 1000);
+    label.textContent = mins > 0 ? (mins + " min") : (secs + " s");
+  }
+
+  async function fireSleep(){
+    clearSleep(false);
+    try{
+      await spotifyFetch("/me/player/pause?device_id=" + activeDeviceId(), { method: "PUT" });
+      showToast("Se acabó el tiempo: música pausada.");
+    } catch(err){
+      console.error(err);
+      if (player) player.pause();
+    }
+  }
+
+  /* Modo noche: mantiene la pantalla encendida pero en negro, para que
+     el navegador no se congele y el temporizador pueda pausar a su hora. */
+  let wakeLock = null;
+
+  async function enterNightMode(){
+    if (!("wakeLock" in navigator)){
+      showToast("Este navegador no permite mantener la pantalla activa; el temporizador puede fallar.");
+      return false;
+    }
+    try{
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", function(){ wakeLock = null; });
+    } catch(err){
+      console.error(err);
+      showToast("No se pudo mantener la pantalla activa.");
+      return false;
+    }
+    document.getElementById("night-mode").classList.add("visible");
+    updateNightCountdown();
+    return true;
+  }
+
+  async function exitNightMode(){
+    document.getElementById("night-mode").classList.remove("visible");
+    if (wakeLock){
+      try{ await wakeLock.release(); } catch(err){ console.error(err); }
+      wakeLock = null;
+    }
+  }
+
+  function nightModeOn(){
+    return document.getElementById("night-mode").classList.contains("visible");
+  }
+
+  function updateNightCountdown(){
+    if (!nightModeOn() || !sleepEndsAt) return;
+    const left = Math.max(0, sleepEndsAt - Date.now());
+    const m = Math.floor(left / 60000);
+    const s = Math.floor((left % 60000) / 1000);
+    document.getElementById("night-countdown").textContent =
+      m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  document.getElementById("night-mode").addEventListener("click", function(){
+    exitNightMode();
+  });
+
+  // Si vuelves a la app tras salir, Android suelta el bloqueo: lo recuperamos.
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden && nightModeOn() && !wakeLock && sleepEndsAt){
+      navigator.wakeLock.request("screen").then(function(w){ wakeLock = w; }).catch(function(){});
+    }
+  });
+
+  function setSleep(minutes, night){
+    clearSleep(false);
+    sleepEndsAt = Date.now() + minutes * 60000;
+    sleepTimeout = setTimeout(fireSleep, minutes * 60000);
+    sleepTick = setInterval(function(){
+      if (!sleepEndsAt) return;
+      if (Date.now() >= sleepEndsAt){ fireSleep(); return; }
+      updateSleepButton();
+      updateNightCountdown();
+    }, 1000);
+    updateSleepButton();
+    if (night){
+      enterNightMode().then(function(ok){
+        if (!ok) showToast("La música se pausará en " + minutes + " minutos.");
+      });
+    } else {
+      showToast("La música se pausará en " + minutes + " minutos.");
+    }
+  }
+
+  function clearSleep(notify){
+    clearTimeout(sleepTimeout);
+    clearInterval(sleepTick);
+    sleepTimeout = null; sleepTick = null; sleepEndsAt = null;
+    exitNightMode();
+    updateSleepButton();
+    if (notify) showToast("Temporizador cancelado.");
+  }
+
+  // Si el navegador se suspende y vuelve, comprobamos si ya venció.
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden && sleepEndsAt && Date.now() >= sleepEndsAt) fireSleep();
+  });
+
+  function openSleepModal(){
+    document.getElementById("sleep-grid").innerHTML = SLEEP_OPTIONS.map(function(m){
+      return '<button class="cat-option" data-min="' + m + '">' + m + ' minutos</button>';
+    }).join("");
+    document.getElementById("sleep-cancel").style.display = sleepEndsAt ? "block" : "none";
+    document.getElementById("sleep-modal").classList.add("visible");
+  }
+  function closeSleepModal(){
+    document.getElementById("sleep-modal").classList.remove("visible");
+  }
+
+  document.getElementById("sleep-btn").addEventListener("click", openSleepModal);
+  document.getElementById("sleep-modal-close").addEventListener("click", closeSleepModal);
+  document.getElementById("sleep-modal").addEventListener("click", function(e){
+    if (e.target.id === "sleep-modal") closeSleepModal();
+  });
+  document.getElementById("sleep-grid").addEventListener("click", function(e){
+    const btn = e.target.closest("[data-min]");
+    if (!btn) return;
+    const night = document.getElementById("sleep-night").checked;
+    setSleep(parseInt(btn.getAttribute("data-min"), 10), night);
+    closeSleepModal();
+  });
+  document.getElementById("sleep-cancel").addEventListener("click", function(){
+    clearSleep(true);
+    closeSleepModal();
+  });
+
   /* ============ DEVICES ============ */
   let targetDeviceId = null;
   let targetDeviceName = "Este navegador";
@@ -1327,7 +1513,7 @@
   document.addEventListener("keydown", function(e){
     if (e.key === "Escape"){
       if (fullPlayerOpen()){ closeFullPlayer(); return; }
-      closeModal(); closeCategoryModal(); closeDeviceModal();
+      closeModal(); closeCategoryModal(); closeDeviceModal(); closeSleepModal();
     }
   });
   document.getElementById("modal-filter-unplayed").addEventListener("change", function(){
