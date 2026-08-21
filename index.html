@@ -193,6 +193,14 @@
     color:var(--ink-soft); font-size:13.5px; line-height:1.6;
   }
 
+  .lib-filter{
+    background:transparent; border:1px solid var(--line); border-radius:14px;
+    padding:5px 11px; font-size:12px; color:var(--ink-soft); white-space:nowrap; flex:none;
+  }
+  .lib-filter:hover{ border-color:var(--ink-soft); color:var(--ink); }
+  .lib-filter.on{ background:var(--ink); color:var(--white); border-color:var(--ink); }
+  .lib-filter:focus-visible{ outline:2px solid var(--ochre); outline-offset:2px; }
+
   /* ---------- Cards ---------- */
   .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:10px; }
   .grid.list-style{ grid-template-columns:1fr; gap:8px; }
@@ -310,6 +318,23 @@
   .np-device{ font-size:10.5px; color:#8891A0; flex:none; font-family:'IBM Plex Mono',monospace; display:none; }
   @media (min-width:720px){ .np-device{ display:block; } }
 
+  #wake-banner{
+    position:fixed; left:12px; right:12px; bottom:96px; z-index:45;
+    background:var(--ink); color:var(--white); border-radius:8px;
+    padding:12px 14px; display:none; align-items:center; gap:12px;
+    box-shadow:0 10px 26px -14px rgba(0,0,0,0.8);
+  }
+  #wake-banner.visible{ display:flex; }
+  .wake-text{ font-size:12.5px; line-height:1.45; flex:1; min-width:0; }
+  .wake-text strong{ font-weight:600; color:var(--ochre); }
+  #wake-open{
+    background:var(--ochre); color:var(--ink); border:none; border-radius:6px;
+    padding:8px 12px; font-size:12.5px; font-weight:600; flex:none;
+  }
+  #wake-open:hover{ background:var(--white); }
+  #wake-close{ background:transparent; border:none; color:#8891A0; font-size:15px; padding:2px; flex:none; }
+  #wake-close:hover{ color:var(--white); }
+
   .toast{
     position:fixed; bottom:96px; left:50%; transform:translateX(-50%);
     background:var(--ink); color:var(--white); padding:10px 18px; border-radius:20px;
@@ -356,14 +381,38 @@
   .npf-bar-fill{ position:absolute; left:0; top:0; bottom:0; background:var(--ochre); border-radius:3px; width:0%; }
   .npf-times{ display:flex; justify-content:space-between; margin-top:7px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8891A0; }
 
-  .npf-controls{ display:flex; align-items:center; justify-content:center; gap:28px; margin-bottom:auto; }
+  .npf-controls{ display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:auto; }
   .npf-controls button{ background:transparent; border:none; color:var(--white); display:flex; }
   .npf-controls button:hover{ color:var(--ochre); }
+  .npf-skip{ position:relative; align-items:center; justify-content:center; }
+  .npf-skip .skip-num{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-42%);
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:500;
+    pointer-events:none;
+  }
+  .npf-controls button:active{ transform:scale(0.92); }
   .npf-playpause{
     width:60px; height:60px; border-radius:50%; background:var(--white); color:var(--ink);
     display:flex; align-items:center; justify-content:center;
   }
   .npf-playpause:hover{ background:var(--ochre); }
+  .npf-volume{
+    display:none; flex-direction:column; align-items:center; gap:8px; margin-top:18px;
+  }
+  .npf-volume.visible{ display:flex; }
+  .vol-wrap{ position:relative; width:104px; height:104px; touch-action:none; cursor:grab; }
+  .vol-wrap:active{ cursor:grabbing; }
+  .vol-wrap svg{ width:100%; height:100%; display:block; }
+  .vol-readout{
+    position:absolute; top:62%; left:0; right:0; text-align:center;
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8891A0; pointer-events:none;
+  }
+  .vol-mute{
+    background:transparent; border:1px solid #3A4453; color:#B7BFCC;
+    border-radius:14px; padding:4px 12px; font-size:11.5px;
+  }
+  .vol-mute:hover{ border-color:var(--ochre); color:var(--ochre); }
+
   .npf-shuffle{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:#8891A0; }
   .npf-shuffle.on{ color:var(--ochre); }
 
@@ -523,10 +572,14 @@
     <section class="block">
       <div class="block-head">
         <h2>Toda tu biblioteca</h2>
-        <span class="count" id="lib-count"></span>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="count" id="lib-count"></span>
+          <button class="lib-filter" id="pending-btn">Solo sin clasificar</button>
+        </div>
       </div>
       <div id="library-list" class="grid list-style"></div>
       <div id="library-loading" class="empty-note">Cargando tu biblioteca de Spotify…</div>
+      <div id="library-empty" class="empty-note" style="display:none;"></div>
     </section>
   </main>
 </div>
@@ -593,6 +646,7 @@
     <div id="device-help"></div>
     <div id="device-list"></div>
     <button class="cat-remove" id="device-refresh" style="border-color:var(--line);color:var(--ink-soft);">Volver a buscar dispositivos</button>
+    <button class="cat-remove" id="device-open-spotify" style="border-color:var(--moss);color:var(--moss);margin-top:8px;">Abrir Spotify para que aparezca</button>
   </div>
 </div>
 
@@ -622,14 +676,40 @@
 
   <div class="npf-controls">
     <button id="npf-prev" aria-label="Anterior">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l10-6v12z"/></svg>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l10-6v12z"/></svg>
+    </button>
+    <button id="npf-back" class="npf-skip" aria-label="Retroceder 15 segundos">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5V2L7.5 5.5 12 9V6a6.5 6.5 0 1 1-6.5 6.5"/>
+      </svg>
+      <span class="skip-num">15</span>
     </button>
     <button id="npf-playpause" class="npf-playpause" aria-label="Reproducir o pausar">
       <svg id="npf-play-icon" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
     </button>
-    <button id="npf-next" aria-label="Siguiente">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4.5 6l10 6-10 6z"/></svg>
+    <button id="npf-forward" class="npf-skip" aria-label="Avanzar 30 segundos">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5V2l4.5 3.5L12 9V6a6.5 6.5 0 1 0 6.5 6.5"/>
+      </svg>
+      <span class="skip-num">30</span>
     </button>
+    <button id="npf-next" aria-label="Siguiente">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4.5 6l10 6-10 6z"/></svg>
+    </button>
+  </div>
+
+  <div class="npf-volume" id="npf-volume">
+    <div class="vol-wrap" id="vol-wrap" role="slider" aria-label="Volumen" aria-valuemin="0" aria-valuemax="100" aria-valuenow="60" tabindex="0">
+      <svg viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="42" fill="none" stroke="#3A4453" stroke-width="7" stroke-linecap="round" stroke-dasharray="198 264" transform="rotate(135 50 50)"></circle>
+        <circle id="vol-arc" cx="50" cy="50" r="42" fill="none" stroke="#C9A227" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 264" transform="rotate(135 50 50)"></circle>
+        <circle cx="50" cy="50" r="30" fill="#141B25"></circle>
+        <line id="vol-pointer" x1="50" y1="50" x2="50" y2="26" stroke="#EDE6D6" stroke-width="3" stroke-linecap="round" transform="rotate(-135 50 50)"></line>
+        <circle cx="50" cy="50" r="3.5" fill="#A64B2A"></circle>
+      </svg>
+      <div class="vol-readout" id="vol-readout">60</div>
+    </div>
+    <button class="vol-mute" id="vol-mute">Silencio</button>
   </div>
 </div>
 
@@ -657,6 +737,14 @@
   <div id="night-hint">Toca para salir</div>
 </div>
 
+<div id="wake-banner">
+  <div class="wake-text">
+    <strong id="wake-name">Tu dispositivo</strong> está dormido. Ábrelo un momento y vuelve.
+  </div>
+  <button id="wake-open">Abrir Spotify</button>
+  <button id="wake-close" aria-label="Cerrar">✕</button>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
@@ -672,7 +760,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "1.3";
+  const APP_VERSION = "1.7";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -694,6 +782,7 @@
   }
   const LS_TOKENS = "locspot_tokens";
   const LS_PINS = "locspot_pins";
+  const LS_DEVICE = "locspot_device";
   const SS_VERIFIER = "locspot_pkce_verifier";
 
   document.getElementById("app-version").textContent = "v" + APP_VERSION;
@@ -950,14 +1039,27 @@
   function allItems(){
     return library.playlists.concat(library.shows);
   }
+  let onlyPending = false;
+
   function filteredItems(){
     let items = allItems();
+    if (onlyPending){
+      const pins = getPins();
+      items = items.filter(function(i){ return !pins[i.uri]; });
+    }
     if (searchQuery){
       const q = searchQuery.toLowerCase();
       items = items.filter(function(i){ return i.name.toLowerCase().indexOf(q) !== -1; });
     }
     return items;
   }
+
+  document.getElementById("pending-btn").addEventListener("click", function(){
+    onlyPending = !onlyPending;
+    this.classList.toggle("on", onlyPending);
+    this.textContent = onlyPending ? "Ver toda la biblioteca" : "Solo sin clasificar";
+    render();
+  });
 
   function buildTabs(){
     const tabs = ['<button class="tab-btn active" data-tab="all">Todo</button>']
@@ -1053,8 +1155,25 @@
     }
 
     const items = filteredItems();
-    document.getElementById("lib-count").textContent = items.length + (items.length === 1 ? " elemento" : " elementos");
-    document.getElementById("library-list").innerHTML = items.map(function(i){ return cardHTML(i, true); }).join("");
+    const total = allItems().length;
+    const pendingCount = total - Object.keys(getPins()).length;
+
+    document.getElementById("lib-count").textContent = onlyPending
+      ? items.length + (items.length === 1 ? " pendiente" : " pendientes")
+      : items.length + (items.length === 1 ? " elemento" : " elementos") +
+        (total > 0 && pendingCount > 0 ? " · " + pendingCount + " sin clasificar" : "");
+
+    const libEmpty = document.getElementById("library-empty");
+    if (total > 0 && items.length === 0){
+      document.getElementById("library-list").innerHTML = "";
+      libEmpty.textContent = onlyPending && !searchQuery
+        ? "Ya has clasificado toda tu biblioteca."
+        : "Nada coincide con la búsqueda.";
+      libEmpty.style.display = "block";
+    } else {
+      libEmpty.style.display = "none";
+      document.getElementById("library-list").innerHTML = items.map(function(i){ return cardHTML(i, true); }).join("");
+    }
   }
 
   document.addEventListener("click", function(e){
@@ -1280,6 +1399,26 @@
     document.getElementById("device-btn-label").textContent = targetDeviceName;
   }
 
+  function saveDevice(){
+    if (targetDeviceId){
+      localStorage.setItem(LS_DEVICE, JSON.stringify({ id: targetDeviceId, name: targetDeviceName }));
+    } else {
+      localStorage.removeItem(LS_DEVICE);
+    }
+  }
+  function loadSavedDevice(){
+    const saved = JSON.parse(localStorage.getItem(LS_DEVICE) || "null");
+    if (!saved) return;
+    targetDeviceId = saved.id;
+    targetDeviceName = saved.name;
+    updateDeviceButton();
+  }
+
+  function openSpotifyApp(){
+    showToast("Abriendo Spotify. Vuelve a LOCSPOT en cuanto se cargue.");
+    window.location.href = "spotify:";
+  }
+
   function activeDeviceId(){
     return targetDeviceId || deviceId;
   }
@@ -1296,7 +1435,8 @@
   // En el móvil, el reproductor del navegador se suspende al bloquear la pantalla.
   // Solo sirve la app de Spotify del propio teléfono: nunca un ordenador ni otro navegador.
   async function autoSelectMobileDevice(){
-    if (!isMobileDevice() || targetDeviceId) return;
+    if (targetDeviceId) return;
+    if (!isMobileDevice()) return;
     try{
       const data = await spotifyFetch("/me/player/devices");
       const devices = (data && data.devices) ? data.devices : [];
@@ -1310,6 +1450,7 @@
       const chosen = phones.find(function(d){ return d.is_active; }) || phones[0];
       targetDeviceId = chosen.id;
       targetDeviceName = chosen.name;
+      saveDevice();
       updateDeviceButton();
       showToast("Sonará en " + chosen.name + ", así no se corta con la pantalla bloqueada.");
     } catch(err){
@@ -1392,6 +1533,19 @@
     }
   }
 
+  document.getElementById("device-open-spotify").addEventListener("click", function(){
+    closeDeviceModal();
+    openSpotifyApp();
+  });
+
+  document.getElementById("wake-open").addEventListener("click", function(){
+    document.getElementById("wake-banner").classList.remove("visible");
+    openSpotifyApp();
+  });
+  document.getElementById("wake-close").addEventListener("click", function(){
+    document.getElementById("wake-banner").classList.remove("visible");
+  });
+
   document.getElementById("device-refresh").addEventListener("click", loadDeviceList);
 
   function closeDeviceModal(){
@@ -1408,6 +1562,7 @@
     if (!row) return;
     targetDeviceId = row.getAttribute("data-device");
     targetDeviceName = targetDeviceId === deviceId ? "Este navegador" : row.getAttribute("data-name");
+    saveDevice();
     updateDeviceButton();
     closeDeviceModal();
     try{
@@ -1422,10 +1577,111 @@
     }
   });
 
+  /* ============ VOLUMEN ============ */
+  const VOL_FULL = 2 * Math.PI * 42;
+  const VOL_SPAN = VOL_FULL * 0.75;
+  let volume = 60;
+  let volumeBeforeMute = 60;
+  let volumeSupported = false;
+  let volumeSendTimer = null;
+
+  function paintVolume(){
+    document.getElementById("vol-readout").textContent = Math.round(volume);
+    document.getElementById("vol-arc").setAttribute("stroke-dasharray", (VOL_SPAN * volume / 100) + " " + VOL_FULL);
+    document.getElementById("vol-pointer").setAttribute("transform", "rotate(" + (-135 + volume * 2.7) + " 50 50)");
+    document.getElementById("vol-mute").textContent = volume === 0 ? "Sonido" : "Silencio";
+    document.getElementById("vol-wrap").setAttribute("aria-valuenow", String(Math.round(volume)));
+  }
+
+  function sendVolume(){
+    clearTimeout(volumeSendTimer);
+    volumeSendTimer = setTimeout(async function(){
+      try{
+        if (isRemote()){
+          await spotifyFetch("/me/player/volume?volume_percent=" + Math.round(volume) + "&device_id=" + activeDeviceId(), { method: "PUT" });
+        } else if (player){
+          await player.setVolume(volume / 100);
+        }
+      } catch(err){
+        console.error(err);
+        showToast("Este dispositivo no permite cambiar el volumen desde aquí.");
+      }
+    }, 250);
+  }
+
+  function volumeFromPointer(e){
+    const wrap = document.getElementById("vol-wrap");
+    const r = wrap.getBoundingClientRect();
+    const x = e.clientX - (r.left + r.width / 2);
+    const y = e.clientY - (r.top + r.height / 2);
+    let a = Math.atan2(x, -y) * 180 / Math.PI;
+    if (a < -135) a = -135;
+    if (a > 135) a = 135;
+    volume = Math.max(0, Math.min(100, Math.round((a + 135) / 2.7)));
+    paintVolume();
+    sendVolume();
+  }
+
+  (function(){
+    const wrap = document.getElementById("vol-wrap");
+    let dragging = false;
+    wrap.addEventListener("pointerdown", function(e){
+      dragging = true;
+      wrap.setPointerCapture(e.pointerId);
+      volumeFromPointer(e);
+    });
+    wrap.addEventListener("pointermove", function(e){ if (dragging) volumeFromPointer(e); });
+    wrap.addEventListener("pointerup", function(){ dragging = false; });
+    wrap.addEventListener("pointercancel", function(){ dragging = false; });
+    wrap.addEventListener("keydown", function(e){
+      let d = 0;
+      if (e.key === "ArrowUp" || e.key === "ArrowRight") d = 5;
+      if (e.key === "ArrowDown" || e.key === "ArrowLeft") d = -5;
+      if (!d) return;
+      e.preventDefault();
+      volume = Math.max(0, Math.min(100, volume + d));
+      paintVolume();
+      sendVolume();
+    });
+  })();
+
+  document.getElementById("vol-mute").addEventListener("click", function(){
+    if (volume > 0){ volumeBeforeMute = volume; volume = 0; }
+    else { volume = volumeBeforeMute || 40; }
+    paintVolume();
+    sendVolume();
+  });
+
+  // La rueda solo se muestra si el dispositivo activo admite control de volumen.
+  async function refreshVolumeSupport(){
+    const box = document.getElementById("npf-volume");
+    try{
+      const data = await spotifyFetch("/me/player/devices");
+      const devices = (data && data.devices) ? data.devices : [];
+      const current = activeDeviceId();
+      const dev = devices.find(function(d){ return d.id === current; });
+      if (dev){
+        volumeSupported = dev.supports_volume !== false;
+        if (typeof dev.volume_percent === "number"){
+          volume = dev.volume_percent;
+          volumeBeforeMute = volume || 40;
+          paintVolume();
+        }
+      } else {
+        volumeSupported = !isRemote();
+      }
+    } catch(err){
+      console.error(err);
+      volumeSupported = !isRemote();
+    }
+    box.classList.toggle("visible", volumeSupported);
+  }
+
   /* ============ FULL SCREEN NOW PLAYING ============ */
   function openFullPlayer(){
     if (!document.getElementById("now-playing").classList.contains("visible")) return;
     syncFullPlayer();
+    refreshVolumeSupport();
     document.getElementById("np-full").classList.add("visible");
     document.body.style.overflow = "hidden";
     history.pushState({ npFull: true }, "");
@@ -1460,6 +1716,35 @@
   document.getElementById("np-art").addEventListener("click", openFullPlayer);
   document.querySelector(".np-meta").addEventListener("click", openFullPlayer);
   document.getElementById("npf-min").addEventListener("click", closeFullPlayer);
+
+  /* Saltos de 15 s atrás y 30 s adelante. Consultamos la posición real
+     en el momento de pulsar, para no depender de la barra visual. */
+  async function skipBy(deltaMs){
+    try{
+      if (isRemote()){
+        const state = await spotifyFetch("/me/player?additional_types=track,episode");
+        if (!state || !state.item) return;
+        const dur = state.item.duration_ms || 0;
+        let pos = (state.progress_ms || 0) + deltaMs;
+        pos = Math.max(0, Math.min(pos, Math.max(0, dur - 1000)));
+        await spotifyFetch("/me/player/seek?position_ms=" + Math.round(pos) + "&device_id=" + activeDeviceId(), { method: "PUT" });
+        setTimeout(pollRemoteState, 400);
+        return;
+      }
+      if (!player) return;
+      const state = await player.getCurrentState();
+      if (!state) return;
+      let pos = state.position + deltaMs;
+      pos = Math.max(0, Math.min(pos, Math.max(0, state.duration - 1000)));
+      await player.seek(pos);
+    } catch(err){
+      console.error(err);
+      showToast("No se pudo mover la reproducción.");
+    }
+  }
+
+  document.getElementById("npf-back").addEventListener("click", function(){ skipBy(-15000); });
+  document.getElementById("npf-forward").addEventListener("click", function(){ skipBy(30000); });
 
   document.getElementById("npf-playpause").addEventListener("click", function(){
     document.getElementById("np-playpause").click();
@@ -1609,7 +1894,8 @@
       warnIfBrowserOnMobile();
     } catch(err){
       console.error(err);
-      showToast("No se pudo reproducir el episodio.");
+      if (deviceAsleep(err)) offerWake();
+      else showToast("No se pudo reproducir el episodio.");
     }
   }
 
@@ -1618,6 +1904,17 @@
     if (!isRemote()){
       showToast("Suena en el navegador: se cortará al bloquear la pantalla. Abre la app de Spotify y cámbialo arriba.");
     }
+  }
+
+  function deviceAsleep(err){
+    const s = String(err);
+    return s.indexOf("404") !== -1 || s.indexOf("NO_ACTIVE_DEVICE") !== -1 || s.indexOf("Device not found") !== -1;
+  }
+
+  function offerWake(){
+    const el = document.getElementById("wake-banner");
+    document.getElementById("wake-name").textContent = targetDeviceName;
+    el.classList.add("visible");
   }
 
   async function playItem(item){
@@ -1642,7 +1939,8 @@
       warnIfBrowserOnMobile();
     } catch(err){
       console.error(err);
-      showToast("No se pudo iniciar la reproducción. Prueba a elegir otro dispositivo arriba.");
+      if (deviceAsleep(err)) offerWake();
+      else showToast("No se pudo iniciar la reproducción. Prueba a elegir otro dispositivo arriba.");
     }
   }
 
@@ -1858,6 +2156,7 @@
       document.getElementById("onboarding").style.display = "none";
       document.getElementById("app").classList.add("visible");
       buildTabs();
+      loadSavedDevice();
       updateDeviceButton();
       startRemotePolling();
       try{
