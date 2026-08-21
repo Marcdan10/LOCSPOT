@@ -796,7 +796,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "2.3";
+  const APP_VERSION = "2.4";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -1441,22 +1441,42 @@
     const fields = useFields
       ? "&fields=total,items(track(name,uri,duration_ms,artists(name)))"
       : "";
-    return await spotifyFetch("/playlists/" + playlistId + "/tracks?limit=100&offset=" + offset +
-      "&market=from_token" + fields);
+    return await spotifyFetch("/playlists/" + playlistId + "/tracks?limit=100&offset=" + offset + fields);
+  }
+
+  function spotifyMessage(err){
+    const s = String(err);
+    const m = s.match(/\{[\s\S]*\}/);
+    if (m){
+      try{
+        const j = JSON.parse(m[0]);
+        if (j.error && j.error.message) return j.error.message;
+      } catch(e){}
+    }
+    return s.replace("Error: spotify_api_error", "").trim();
   }
 
   function trackErrorMessage(err, item){
     const s = String(err);
+    const literal = spotifyMessage(err);
     if (s.indexOf("404") !== -1){
       const deSpotify = item && item.owner && /spotify/i.test(item.owner);
       return deSpotify
         ? "Spotify no permite a las aplicaciones externas leer el contenido de sus propias listas (Discover Weekly, Daily Mix, editoriales). Puedes reproducirla con el botón de play, pero no ver las canciones."
-        : "Spotify no da acceso al contenido de esta lista. Si es una lista creada por Spotify, es su limitación; con el botón de play sí se reproduce.";
+        : "Spotify no da acceso al contenido de esta lista. Respuesta: " + literal;
     }
-    if (s.indexOf("401") !== -1) return "La sesión ha caducado. Recarga LOCSPOT para volver a entrar.";
-    if (s.indexOf("403") !== -1) return "Tu cuenta no tiene permiso para leer esta lista.";
+    if (s.indexOf("401") !== -1) return "La sesión ha caducado. Vuelve a conectar con Spotify. Respuesta: " + literal;
+    if (s.indexOf("403") !== -1){
+      return "Spotify ha rechazado la petición: " + literal +
+             ". Suele deberse a que el permiso para leer listas se concedió antes de existir esta función; al reconectar se vuelve a pedir.";
+    }
     if (s.indexOf("429") !== -1) return "Spotify está limitando las peticiones. Espera un momento y vuelve a intentarlo.";
-    return "No se pudieron cargar las canciones. " + s.slice(0, 120);
+    return "No se pudieron cargar las canciones. Respuesta: " + literal.slice(0, 160);
+  }
+
+  function reconnectSpotify(){
+    localStorage.removeItem(LS_TOKENS);
+    beginLogin();
   }
 
   async function openTrackPicker(item){
@@ -1507,9 +1527,16 @@
       renderTrackList();
     } catch(err){
       console.error(err);
+      const s = String(err);
+      const necesitaLogin = s.indexOf("401") !== -1 || s.indexOf("403") !== -1;
       document.getElementById("tracks-list").innerHTML =
-        '<div class="modal-empty">' + esc(trackErrorMessage(err, item)) +
-        '</div><button class="cat-remove" id="tracks-play-anyway" style="margin-top:12px;">Reproducir la lista igualmente</button>';
+        '<div class="modal-empty">' + esc(trackErrorMessage(err, item)) + '</div>' +
+        (necesitaLogin
+          ? '<button class="cat-remove" id="tracks-reconnect" style="margin-top:12px;border-color:var(--ochre);color:var(--rust);">Volver a conectar con Spotify</button>'
+          : '') +
+        '<button class="cat-remove" id="tracks-play-anyway" style="margin-top:8px;">Reproducir la lista igualmente</button>';
+      const r = document.getElementById("tracks-reconnect");
+      if (r) r.addEventListener("click", reconnectSpotify);
       const b = document.getElementById("tracks-play-anyway");
       if (b) b.addEventListener("click", function(){
         closeTracksModal();
