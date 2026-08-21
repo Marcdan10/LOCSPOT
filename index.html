@@ -165,16 +165,15 @@
 
   nav.tabs{
     max-width:1080px; margin:0 auto; padding:0 24px 14px;
-    display:flex; gap:6px; overflow-x:auto; scrollbar-width:none;
+    display:flex; gap:5px; flex-wrap:wrap;
   }
-  nav.tabs::-webkit-scrollbar{ display:none; }
   nav.tabs button{
-    background:transparent; border:1px solid transparent;
-    padding:6px 14px; border-radius:16px; font-size:13px; color:var(--ink-soft);
+    background:transparent; border:1px solid var(--line);
+    padding:5px 11px; border-radius:14px; font-size:12.5px; color:var(--ink-soft);
     white-space:nowrap; flex:none;
   }
-  nav.tabs button.active{ background:var(--ink); color:var(--white); }
-  nav.tabs button:hover:not(.active){ border-color:var(--line); color:var(--ink); }
+  nav.tabs button.active{ background:var(--ink); color:var(--white); border-color:var(--ink); }
+  nav.tabs button:hover:not(.active){ border-color:var(--ink-soft); color:var(--ink); }
   nav.tabs button:focus-visible{ outline:2px solid var(--ochre); outline-offset:1px; }
 
   main{ max-width:1080px; margin:0 auto; padding:8px 24px 40px; }
@@ -228,10 +227,9 @@
   @media (prefers-reduced-motion: reduce){ .vinyl-disc{ animation:none; } }
 
   .pin-toggle{
-    position:absolute; top:5px; right:5px; z-index:2;
-    width:23px; height:23px; border-radius:50%; border:none;
-    background:rgba(27,36,48,0.55); color:var(--white);
-    display:flex; align-items:center; justify-content:center; font-size:12px;
+    width:26px; height:26px; border-radius:50%; border:none;
+    background:var(--cream-2); color:var(--ink);
+    display:flex; align-items:center; justify-content:center; font-size:13px;
   }
   .pin-toggle.pinned{ background:var(--ochre); color:var(--ink); }
   .pin-toggle:hover{ background:var(--rust); color:var(--white); }
@@ -424,11 +422,15 @@
   }
 
   @media (max-width:640px){
+    .block-head .count{ display:none; }
+    nav.tabs{ padding:0 12px 10px; gap:4px; }
+    nav.tabs button{ padding:4px 9px; font-size:11.5px; border-radius:12px; }
+    .topbar-inner{ padding:12px 12px 10px; }
+    main{ padding:8px 12px 40px; }
     .grid{ grid-template-columns:repeat(auto-fill,minmax(74px,1fr)); gap:6px; }
     .card .meta{ padding:5px 6px 6px; }
     .card .meta .name{ font-size:10.5px; line-height:1.2; }
     .card .meta .owner{ display:none; }
-    .pin-toggle{ width:20px; height:20px; font-size:10px; top:4px; right:4px; }
     .type-flag{ font-size:7.5px; padding:1px 4px; top:4px; left:4px; }
     .card .play-btn{ width:26px; height:26px; bottom:4px; right:4px; opacity:1; transform:none; }
     #now-playing{ padding:8px 12px; gap:10px; }
@@ -954,7 +956,6 @@
           '<img src="' + escAttr(item.image) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
           '<div class="vinyl"><div class="vinyl-disc"></div></div>' +
           '<span class="' + flagClass + '">' + flagText + '</span>' +
-          '<button class="pin-toggle pinned" data-action="pin" aria-label="Cambiar grupo o quitar">★</button>' +
           '<button class="play-btn" data-action="play" aria-label="Reproducir">' +
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' +
           '</button>' +
@@ -976,7 +977,9 @@
     const pinnedItems = allPinned.filter(matchesFilter);
     const favGrid = document.getElementById("favorites-grid");
     const favEmpty = document.getElementById("favorites-empty");
-    document.getElementById("fav-count").textContent = pinnedItems.length ? pinnedItems.length + " fijados" : "";
+    document.getElementById("fav-count").textContent = pinnedItems.length
+      ? pinnedItems.length + " fijados · mantén pulsado para cambiar de grupo"
+      : "";
     if (pinnedItems.length === 0){
       favGrid.innerHTML = "";
       favEmpty.textContent = allPinned.length === 0
@@ -1022,6 +1025,52 @@
     render();
   });
 
+  /* Pulsación larga (o clic derecho) sobre un tile: cambiar de grupo o quitarlo. */
+  (function(){
+    let pressTimer = null;
+    let longFired = false;
+
+    function itemFromEvent(e){
+      const card = e.target.closest && e.target.closest(".card[data-uri]");
+      if (!card) return null;
+      const uri = card.getAttribute("data-uri");
+      const pins = getPins();
+      return pins[uri] || allItems().find(function(i){ return i.uri === uri; }) || null;
+    }
+
+    function start(e){
+      const item = itemFromEvent(e);
+      if (!item) return;
+      longFired = false;
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(function(){
+        longFired = true;
+        if (navigator.vibrate) navigator.vibrate(15);
+        openCategoryPicker(item);
+      }, 550);
+    }
+    function cancel(){ clearTimeout(pressTimer); }
+
+    document.addEventListener("touchstart", start, { passive: true });
+    document.addEventListener("touchend", cancel);
+    document.addEventListener("touchmove", cancel, { passive: true });
+    document.addEventListener("mousedown", function(e){ if (e.button === 0) start(e); });
+    document.addEventListener("mouseup", cancel);
+    document.addEventListener("contextmenu", function(e){
+      const item = itemFromEvent(e);
+      if (!item) return;
+      e.preventDefault();
+      openCategoryPicker(item);
+    });
+    document.addEventListener("click", function(e){
+      if (longFired && e.target.closest && e.target.closest(".card[data-uri]")){
+        e.stopPropagation();
+        e.preventDefault();
+        longFired = false;
+      }
+    }, true);
+  })();
+
   /* ============ DEVICES ============ */
   let targetDeviceId = null;
   let targetDeviceName = "Este navegador";
@@ -1033,6 +1082,37 @@
 
   function activeDeviceId(){
     return targetDeviceId || deviceId;
+  }
+
+  function isMobileDevice(){
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+           (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  }
+
+  // En el móvil, el reproductor del navegador se suspende al bloquear la pantalla.
+  // Por eso buscamos la app de Spotify y la usamos como destino por defecto.
+  async function autoSelectMobileDevice(){
+    if (!isMobileDevice() || targetDeviceId) return;
+    try{
+      const data = await spotifyFetch("/me/player/devices");
+      const devices = (data && data.devices) ? data.devices : [];
+      const native = devices.filter(function(d){
+        return d.id !== deviceId && !d.is_restricted;
+      });
+      if (native.length === 0){
+        showToast("Abre la app de Spotify en el móvil para que la música no se corte al bloquear la pantalla.");
+        return;
+      }
+      const phone = native.filter(function(d){ return (d.type || "").toLowerCase() === "smartphone"; });
+      const chosen = (phone.find(function(d){ return d.is_active; })) || phone[0] ||
+                     native.find(function(d){ return d.is_active; }) || native[0];
+      targetDeviceId = chosen.id;
+      targetDeviceName = chosen.name;
+      updateDeviceButton();
+      showToast("Sonará en " + chosen.name + ", así no se corta con la pantalla bloqueada.");
+    } catch(err){
+      console.error(err);
+    }
   }
 
   async function activateIfNeeded(){
@@ -1070,12 +1150,16 @@
       list.innerHTML = devices.map(function(d){
         const isCurrent = d.id === current;
         const isThis = d.id === deviceId;
+        const warn = (isThis && isMobileDevice())
+          ? '<span class="d-type" style="display:block;color:#A64B2A;">Se corta al bloquear la pantalla</span>'
+          : '';
         return (
           '<button class="device-row' + (isCurrent ? " current" : "") + '" data-device="' + escAttr(d.id) + '" data-name="' + escAttr(d.name) + '">' +
             '<span class="d-icon">' + deviceIcon(d.type) + '</span>' +
             '<span style="min-width:0;">' +
               '<span class="d-name" style="display:block;">' + esc(d.name) + (isThis ? " (esta ventana)" : "") + '</span>' +
               '<span class="d-type" style="display:block;">' + esc(d.type || "") + '</span>' +
+              warn +
             '</span>' +
             (isCurrent ? '<span class="d-mark">Activo</span>' : '') +
           '</button>'
@@ -1299,9 +1383,16 @@
         body: JSON.stringify({ uris: [ep.uri], position_ms: ep.resume_ms || 0 })
       });
       closeModal();
+      warnIfBrowserOnMobile();
     } catch(err){
       console.error(err);
       showToast("No se pudo reproducir el episodio.");
+    }
+  }
+
+  function warnIfBrowserOnMobile(){
+    if (isMobileDevice() && !isRemote()){
+      showToast("Suena en el navegador: se cortará al bloquear la pantalla. Cambia de dispositivo arriba.");
     }
   }
 
@@ -1324,6 +1415,7 @@
         method: "PUT",
         body: JSON.stringify({ context_uri: item.uri })
       });
+      warnIfBrowserOnMobile();
     } catch(err){
       console.error(err);
       showToast("No se pudo iniciar la reproducción. Prueba a elegir otro dispositivo arriba.");
@@ -1483,6 +1575,7 @@
 
       player.addListener("ready", function(data){
         deviceId = data.device_id;
+        autoSelectMobileDevice();
       });
       player.addListener("not_ready", function(){
         deviceId = null;

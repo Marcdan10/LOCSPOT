@@ -1,4 +1,4 @@
-const CACHE = "locspot-v1";
+const CACHE = "locspot-v4";
 const SHELL = [
   "./",
   "./index.html",
