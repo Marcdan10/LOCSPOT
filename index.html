@@ -774,9 +774,7 @@
 </div>
 
 <div id="wake-banner">
-  <div class="wake-text">
-    <strong id="wake-name">Tu dispositivo</strong> está dormido. Ábrelo un momento y vuelve.
-  </div>
+  <div class="wake-text"></div>
   <button id="wake-open">Abrir Spotify</button>
   <button id="wake-close" aria-label="Cerrar">✕</button>
 </div>
@@ -796,7 +794,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "2.7";
+  const APP_VERSION = "2.8";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -1701,6 +1699,7 @@
             return;
           } catch(err2){ console.error(err2); }
         }
+        pendingPlay = function(){ playTrack(trackUri); };
         offerWake();
       } else {
         showToast("No se pudo reproducir la canción.");
@@ -1886,18 +1885,14 @@
   }
 
   function offerRadioRepair(st){
-    const bar = document.getElementById("wake-banner");
-    document.getElementById("wake-name").textContent = st.name;
-    document.querySelector(".wake-text").innerHTML =
-      '<strong id="wake-name">' + esc(st.name) + '</strong> no responde. Puede que haya cambiado de servidor.';
-    const btn = document.getElementById("wake-open");
-    btn.textContent = "Buscar y arreglar";
-    btn.onclick = function(){ repairRadio(st); };
-    bar.classList.add("visible");
+    showBanner(
+      '<strong>' + esc(st.name) + '</strong> no responde. Puede que haya cambiado de servidor.',
+      "Buscar y arreglar",
+      function(){ repairRadio(st); }
+    );
   }
 
   async function repairRadio(st){
-    const bar = document.getElementById("wake-banner");
     const txt = document.querySelector(".wake-text");
     const btn = document.getElementById("wake-open");
     btn.style.display = "none";
@@ -1910,23 +1905,21 @@
       if (ms !== null && (best === null || ms < best.ms)) best = { url: urls[i], ms: ms };
       if (best && best.ms < 1200) break;
     }
-    btn.style.display = "inline-block";
     if (!best){
-      txt.textContent = "Ninguna dirección de " + st.name + " responde ahora mismo.";
-      btn.textContent = "Cerrar";
-      btn.onclick = function(){ bar.classList.remove("visible"); };
+      showBanner("Ninguna dirección de " + esc(st.name) + " responde ahora mismo.", "Cerrar", hideBanner);
       return;
     }
     if (best.url === st.stream){
       clearRadioFix(st.name);
-      txt.textContent = "La dirección original vuelve a funcionar (" + best.ms + " ms).";
+      showBanner("La dirección original vuelve a funcionar (" + best.ms + " ms).",
+        "Escuchar", function(){ hideBanner(); playRadio(st); });
     } else {
       saveRadioFix(st.name, best.url);
-      txt.textContent = st.name + " arreglada con " + hostOf(best.url) + " (" + best.ms + " ms). Comprueba que suena la emisora correcta.";
+      showBanner(esc(st.name) + " arreglada con " + esc(hostOf(best.url)) + " (" + best.ms +
+        " ms). Comprueba que suena la emisora correcta.",
+        "Escuchar", function(){ hideBanner(); playRadio(st); });
     }
     render();
-    btn.textContent = "Escuchar";
-    btn.onclick = function(){ bar.classList.remove("visible"); playRadio(st); };
   }
 
   /* ============ SLEEP TIMER ============ */
@@ -2141,6 +2134,9 @@
   }
 
   let expectingReturn = false;
+  /* Lo que estabas intentando escuchar cuando el móvil resultó estar dormido.
+     Al volver de Spotify se reproduce solo, sin más toques. */
+  let pendingPlay = null;
 
   function openSpotifyApp(){
     showToast("Abriendo Spotify. Vuelve a LOCSPOT en cuanto se cargue.");
@@ -2148,15 +2144,23 @@
     window.location.href = "spotify:";
   }
 
-  /* Al volver de Spotify, buscamos de nuevo el dispositivo y lo reconectamos solos. */
+  /* Al volver de Spotify, buscamos de nuevo el dispositivo, lo reconectamos
+     y reanudamos lo que hubiera quedado pendiente. */
   document.addEventListener("visibilitychange", function(){
     if (document.hidden || !expectingReturn) return;
     expectingReturn = false;
     setTimeout(function(){
       resolveSavedDevice().then(function(status){
         if (status === "online"){
-          document.getElementById("wake-banner").classList.remove("visible");
-          showToast("Conectado con " + targetDeviceName + ".");
+          hideBanner();
+          if (pendingPlay){
+            const fn = pendingPlay;
+            pendingPlay = null;
+            showToast("Conectado con " + targetDeviceName + ". Reanudando…");
+            fn();
+          } else {
+            showToast("Conectado con " + targetDeviceName + ".");
+          }
         } else if (status === "offline"){
           showToast("Todavía no aparece " + targetDeviceName + ". Dale al play en Spotify un segundo y vuelve.");
         }
@@ -2283,13 +2287,22 @@
     openSpotifyApp();
   });
 
-  document.getElementById("wake-open").addEventListener("click", function(){
+  /* El panel inferior lo usan dos avisos distintos (dispositivo dormido y
+     reparador de radio). Cada uno debe configurarlo entero: texto, botón y
+     acción. Así ninguno hereda el comportamiento del otro. */
+  function showBanner(html, btnLabel, btnAction){
+    const bar = document.getElementById("wake-banner");
+    document.querySelector(".wake-text").innerHTML = html;
+    const btn = document.getElementById("wake-open");
+    btn.style.display = btnLabel ? "inline-block" : "none";
+    btn.textContent = btnLabel || "";
+    btn.onclick = btnAction || null;
+    bar.classList.add("visible");
+  }
+  function hideBanner(){
     document.getElementById("wake-banner").classList.remove("visible");
-    openSpotifyApp();
-  });
-  document.getElementById("wake-close").addEventListener("click", function(){
-    document.getElementById("wake-banner").classList.remove("visible");
-  });
+  }
+  document.getElementById("wake-close").addEventListener("click", hideBanner);
 
   document.getElementById("device-refresh").addEventListener("click", loadDeviceList);
 
@@ -2686,6 +2699,7 @@
             return;
           } catch(err2){ console.error(err2); }
         }
+        pendingPlay = function(){ playEpisode(ep); };
         offerWake();
       } else {
         showToast("No se pudo reproducir el episodio.");
@@ -2706,9 +2720,11 @@
   }
 
   function offerWake(){
-    const el = document.getElementById("wake-banner");
-    document.getElementById("wake-name").textContent = targetDeviceName;
-    el.classList.add("visible");
+    showBanner(
+      '<strong>' + esc(targetDeviceName) + '</strong> está dormido. Abre Spotify un momento y al volver seguiré yo solo.',
+      "Abrir Spotify",
+      function(){ hideBanner(); openSpotifyApp(); }
+    );
   }
 
   async function playItem(item){
@@ -2749,6 +2765,7 @@
             return;
           } catch(err2){ console.error(err2); }
         }
+        pendingPlay = function(){ playItem(item); };
         offerWake();
       } else {
         showToast("No se pudo iniciar la reproducción. Prueba a elegir otro dispositivo arriba.");
