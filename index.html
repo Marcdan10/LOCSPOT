@@ -168,6 +168,21 @@
   .search-wrap input:focus{ outline:2px solid var(--ochre); outline-offset:1px; }
   .search-wrap svg{ position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:0.5; }
 
+  .type-flag.radio{ background:var(--moss); color:var(--white); }
+
+  .type-filter{
+    max-width:1080px; margin:0 auto; padding:0 24px 10px;
+    display:flex;
+  }
+  .type-filter button{
+    background:transparent; border:1px solid var(--line); color:var(--ink-soft);
+    padding:5px 14px; font-size:12px; font-family:'IBM Plex Mono',monospace; letter-spacing:0.03em;
+  }
+  .type-filter button:first-child{ border-radius:14px 0 0 14px; }
+  .type-filter button:last-child{ border-radius:0 14px 14px 0; border-left:none; }
+  .type-filter button:nth-child(2){ border-left:none; }
+  .type-filter button.active{ background:var(--ochre); border-color:var(--ochre); color:var(--ink); }
+
   nav.tabs{
     max-width:1080px; margin:0 auto; padding:0 24px 14px;
     display:flex; gap:5px; flex-wrap:wrap;
@@ -487,6 +502,8 @@
 
   @media (max-width:640px){
     .block-head .count{ display:none; }
+    .type-filter{ padding:0 12px 8px; }
+    .type-filter button{ padding:4px 11px; font-size:11px; }
     nav.tabs{ padding:0 12px 10px; gap:4px; }
     nav.tabs button{ padding:4px 9px; font-size:11.5px; border-radius:12px; }
     .topbar-inner{ padding:12px 12px 10px; }
@@ -554,13 +571,19 @@
         <span class="label" id="sleep-btn-label">Apagado</span>
       </button>
     </div>
+    <div class="type-filter" id="type-filter">
+      <button class="active" data-type="all">Todas</button>
+      <button data-type="playlist">Playlists</button>
+      <button data-type="podcast">Podcasts</button>
+      <button data-type="radio">Radio</button>
+    </div>
     <nav class="tabs" id="tabs"></nav>
   </header>
 
   <main>
     <section class="block">
       <div class="block-head">
-        <h2>Tus accesos directos</h2>
+        <h2 id="fav-head-title">Tus accesos directos</h2>
         <span class="count" id="fav-count"></span>
       </div>
       <div id="favorites-grid"></div>
@@ -569,7 +592,7 @@
       </div>
     </section>
 
-    <section class="block">
+    <section class="block" id="library-section">
       <div class="block-head">
         <h2>Toda tu biblioteca</h2>
         <div style="display:flex;align-items:center;gap:12px;">
@@ -621,6 +644,19 @@
       Mostrar solo no escuchados
     </label>
     <div id="modal-episode-list"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="tracks-modal">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="tracks-modal-name">
+    <div class="modal-head">
+      <h3 id="tracks-modal-name">—</h3>
+      <button class="modal-close" id="tracks-modal-close" aria-label="Cerrar">✕</button>
+    </div>
+    <p class="modal-sub" id="tracks-modal-sub">Toca una canción para empezar por ella.</p>
+    <input type="search" id="tracks-search" placeholder="Buscar en la playlist…" autocomplete="off"
+           style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13.5px;font-family:'Work Sans',sans-serif;background:var(--white);color:var(--ink);margin-bottom:12px;">
+    <div id="tracks-list"></div>
   </div>
 </div>
 
@@ -760,7 +796,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "1.7";
+  const APP_VERSION = "2.1";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -783,6 +819,35 @@
   const LS_TOKENS = "locspot_tokens";
   const LS_PINS = "locspot_pins";
   const LS_DEVICE = "locspot_device";
+  const LS_USAGE = "locspot_usage";
+
+  /* Uso con decaimiento: cada reproducción suma 1, y el peso acumulado
+     pierde la mitad de su valor cada 30 días, para que lo antiguo baje solo. */
+  const USAGE_HALF_LIFE_DAYS = 30;
+
+  function getUsage(){
+    return JSON.parse(localStorage.getItem(LS_USAGE) || "{}");
+  }
+  function decayedScore(entry, now){
+    if (!entry) return 0;
+    const days = (now - entry.last) / 86400000;
+    return entry.score * Math.pow(0.5, days / USAGE_HALF_LIFE_DAYS);
+  }
+  function bumpUsage(uri){
+    if (!uri) return;
+    const usage = getUsage();
+    const now = Date.now();
+    usage[uri] = { score: decayedScore(usage[uri], now) + 1, last: now };
+    localStorage.setItem(LS_USAGE, JSON.stringify(usage));
+  }
+  function sortByUsage(items){
+    const usage = getUsage();
+    const now = Date.now();
+    return items
+      .map(function(item, i){ return { item: item, i: i, s: decayedScore(usage[item.uri], now) }; })
+      .sort(function(a, b){ return (b.s - a.s) || (a.i - b.i); })
+      .map(function(x){ return x.item; });
+  }
   const SS_VERIFIER = "locspot_pkce_verifier";
 
   document.getElementById("app-version").textContent = "v" + APP_VERSION;
@@ -1061,10 +1126,43 @@
     render();
   });
 
+  const RADIO_CATS = ["General","Música","Internacional"];
+  const RADIO = [
+    { name: "RAC 1", stream: "https://playerservices.streamtheworld.com/api/livestream-redirect/RAC_1.mp3", logo: "https://graph.facebook.com/rac1oficial/picture?width=200&height=200", uuid: "38a33fc0-be05-4c98-8c6a-ba3869575bc1", cat: "General" },
+    { name: "Catalunya Ràdio", stream: "https://shoutcast.ccma.cat/ccma/catalunyaradioHD.mp3", logo: "https://graph.facebook.com/catradio/picture?width=200&height=200", uuid: "2087b4c4-820a-4545-9bd7-eaf28792f44a", cat: "General" },
+    { name: "SER Barcelona", stream: "https://playerservices.streamtheworld.com/api/livestream-redirect/SER_BARCELONA.mp3", logo: "https://graph.facebook.com/cadenaser/picture?width=200&height=200", uuid: "04e50d31-07d9-4e6a-927a-b22fb034eb3c", cat: "General" },
+    { name: "Onda Cero", stream: "https://radio-atres-live.ondacero.es/api/livestream-redirect/OCAAC.aac", logo: "https://graph.facebook.com/ondacero/picture?width=200&height=200", uuid: "b8601593-152a-429d-9cb2-5065cf7c0185", cat: "General" },
+    { name: "COPE", stream: "https://flucast09-h-cloud.flumotion.com/cope/net1.mp3", logo: "https://graph.facebook.com/COPE/picture?width=200&height=200", uuid: "79d12e3b-f24a-4820-bc93-cd412c2d90bf", cat: "General" },
+    { name: "Radio Intereconomía", stream: "https://streaming.intereconomia.com/siliconorg", logo: "https://graph.facebook.com/RadioIntereconomia/picture?width=200&height=200", uuid: "11f577b3-6036-46f1-a542-980d7669e877", cat: "General" },
+    { name: "Capital Radio", stream: "https://mdstrm.com/audio/67d2a8685ae4234de49e40f6/live.m3u8", logo: "https://graph.facebook.com/capitalradiob/picture?width=200&height=200", uuid: "2b1d504a-16a4-44ea-be7b-293edbc3824d", cat: "General" },
+    { name: "RAC 105", stream: "https://playerservices.streamtheworld.com/api/livestream-redirect/RAC105.mp3", logo: "https://graph.facebook.com/rac105/picture?width=200&height=200", uuid: "6d5e38ec-02f3-44ba-a81c-301560593eef", cat: "Música" },
+    { name: "Kiss FM", stream: "https://kissfm.kissfmradio.cires21.com/kissfm.mp3", logo: "https://graph.facebook.com/kissfm.es/picture?width=200&height=200", uuid: "743889d5-5472-4e9f-ac61-5f0f04e7efa8", cat: "Música" },
+    { name: "Catalunya Música", stream: "https://shoutcast.ccma.cat/ccma/catalunyamusicaHD.mp3", logo: "https://graph.facebook.com/catmusica/picture?width=200&height=200", uuid: "8cb4d1a5-523d-11ea-be63-52543be04c81", cat: "Música" },
+    { name: "LOS40", stream: "https://playerservices.streamtheworld.com/api/livestream-redirect/Los40.mp3", logo: "https://graph.facebook.com/los40/picture?width=200&height=200", uuid: "b81c57c3-eb05-47ac-a0ea-eb01a6960cc4", cat: "Música" },
+    { name: "Cadena 100", stream: "https://cadena100-cope.flumotion.com/chunks.m3u8", logo: "https://graph.facebook.com/CADENA100/picture?width=200&height=200", uuid: "960c37c6-0601-11e8-ae97-52543be04c81", cat: "Música" },
+    { name: "Rock FM", stream: "https://rockfm-cope.flumotion.com/playlist.m3u8", logo: "https://graph.facebook.com/RockFM/picture?width=200&height=200", uuid: "340e0bba-d897-11e8-a9cc-52543be04c81", cat: "Música" },
+    { name: "BBC World Service", stream: "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service", logo: "https://graph.facebook.com/bbcworldservice/picture?width=200&height=200", uuid: "98adecf7-2683-4408-9be7-02d3f9098eb8", cat: "Internacional" },
+    { name: "Bloomberg Radio", stream: "https://playerservices.streamtheworld.com/api/livestream-redirect/WBBRAMAAC.aac", logo: "https://graph.facebook.com/bloombergbusiness/picture?width=200&height=200", uuid: "96224885-0601-11e8-ae97-52543be04c81", cat: "Internacional" },
+    { name: "France Inter", stream: "https://icecast.radiofrance.fr/franceinter-midfi.mp3", logo: "https://graph.facebook.com/franceinter/picture?width=200&height=200", uuid: "d2bbffaf-5d67-4a65-9772-097d8c0269d3", cat: "Internacional" },
+    { name: "NRJ", stream: "https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3", logo: "https://www.google.com/s2/favicons?domain=nrj.fr&sz=128", uuid: "226396d3-6335-4d39-89fc-f1564d6f3ad7", cat: "Internacional" }
+  ];
+
+  const PLAYLIST_CATS = ["Pop","Clásica","Relax"];
+  let typeFilter = "all";
+
+  function catsForType(){
+    if (typeFilter === "radio") return RADIO_CATS;
+    if (typeFilter === "playlist") return PLAYLIST_CATS;
+    if (typeFilter === "podcast") return CATEGORIES.filter(function(c){ return PLAYLIST_CATS.indexOf(c) === -1; });
+    return CATEGORIES;
+  }
+
   function buildTabs(){
-    const tabs = ['<button class="tab-btn active" data-tab="all">Todo</button>']
-      .concat(CATEGORIES.map(function(cat){
-        return '<button class="tab-btn" data-tab="' + escAttr(cat) + '">' + esc(cat) + '</button>';
+    const cats = catsForType();
+    if (activeTab !== "all" && cats.indexOf(activeTab) === -1) activeTab = "all";
+    const tabs = ['<button class="tab-btn' + (activeTab === "all" ? " active" : "") + '" data-tab="all">Todo</button>']
+      .concat(cats.map(function(cat){
+        return '<button class="tab-btn' + (activeTab === cat ? " active" : "") + '" data-tab="' + escAttr(cat) + '">' + esc(cat) + '</button>';
       }));
     document.getElementById("tabs").innerHTML = tabs.join("");
     document.querySelectorAll(".tab-btn").forEach(function(btn){
@@ -1077,7 +1175,19 @@
     });
   }
 
+  document.querySelectorAll("#type-filter button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      document.querySelectorAll("#type-filter button").forEach(function(b){ b.classList.remove("active"); });
+      btn.classList.add("active");
+      typeFilter = btn.getAttribute("data-type");
+      buildTabs();
+      render();
+    });
+  });
+
   function matchesFilter(item){
+    if (typeFilter === "playlist" && item.type === "podcast") return false;
+    if (typeFilter === "podcast" && item.type !== "podcast") return false;
     if (activeTab !== "all" && item.category !== activeTab) return false;
     if (searchQuery && item.name.toLowerCase().indexOf(searchQuery.toLowerCase()) === -1) return false;
     return true;
@@ -1125,10 +1235,87 @@
   function esc(s){ return (s || "").replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
   function escAttr(s){ return esc(s); }
 
+  function radioCardHTML(st){
+    const isPlaying = currentRadio && currentRadio.name === st.name && !radioAudio.paused;
+    const fixed = !!getRadioFixes()[st.name];
+    return (
+      '<div class="card' + (isPlaying ? " playing" : "") + '" data-radio="' + escAttr(st.name) + '">' +
+        '<div class="art-wrap">' +
+          '<img src="' + escAttr(st.logo) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
+          '<div class="vinyl"><div class="vinyl-disc"></div></div>' +
+          '<span class="type-flag radio">Radio</span>' +
+          '<button class="play-btn" data-raction="play" aria-label="Escuchar">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' +
+          '</button>' +
+        '</div>' +
+        '<div class="meta">' +
+          '<div class="name">' + esc(st.name) + '</div>' +
+          '<div class="owner">' + (fixed ? "dirección actualizada" : "&nbsp;") + '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderRadio(){
+    const favGrid = document.getElementById("favorites-grid");
+    const favEmpty = document.getElementById("favorites-empty");
+    const usage = getUsage();
+    const now = Date.now();
+    let list = RADIO.filter(function(st){
+      if (activeTab !== "all" && st.cat !== activeTab) return false;
+      if (searchQuery && st.name.toLowerCase().indexOf(searchQuery.toLowerCase()) === -1) return false;
+      return true;
+    });
+    list = list.map(function(st, i){
+      return { st: st, i: i, s: decayedScore(usage["radio:" + st.name], now) };
+    }).sort(function(a, b){ return (b.s - a.s) || (a.i - b.i); }).map(function(x){ return x.st; });
+
+    document.getElementById("fav-count").textContent = list.length + " emisoras";
+    if (list.length === 0){
+      favGrid.innerHTML = "";
+      favEmpty.textContent = "Ninguna emisora coincide con la búsqueda.";
+      favEmpty.style.display = "block";
+      return;
+    }
+    favEmpty.style.display = "none";
+    let html = "";
+    RADIO_CATS.forEach(function(cat){
+      const group = list.filter(function(st){ return st.cat === cat; });
+      if (group.length === 0) return;
+      html += '<div class="group-head"><span class="group-name">' + esc(cat) + '</span>' +
+              '<span class="group-rule"></span>' +
+              '<span class="group-count">' + group.length + '</span></div>';
+      html += '<div class="grid">' + group.map(radioCardHTML).join("") + '</div>';
+    });
+    favGrid.innerHTML = html;
+  }
+
+  document.addEventListener("click", function(e){
+    const card = e.target.closest && e.target.closest("[data-radio]");
+    if (!card) return;
+    const name = card.getAttribute("data-radio");
+    const st = RADIO.find(function(r){ return r.name === name; });
+    if (!st) return;
+    if (currentRadio && currentRadio.name === name && !radioAudio.paused){
+      radioAudio.pause();
+      render();
+      return;
+    }
+    playRadio(st);
+  });
+
   function render(){
+    if (typeFilter === "radio"){
+      document.getElementById("fav-head-title").textContent = "Emisoras de radio";
+      document.getElementById("library-section").style.display = "none";
+      renderRadio();
+      return;
+    }
+    document.getElementById("fav-head-title").textContent = "Tus accesos directos";
+    document.getElementById("library-section").style.display = "";
     const pins = getPins();
     const allPinned = Object.values(pins);
-    const pinnedItems = allPinned.filter(matchesFilter);
+    const pinnedItems = sortByUsage(allPinned.filter(matchesFilter));
     const favGrid = document.getElementById("favorites-grid");
     const favEmpty = document.getElementById("favorites-empty");
     document.getElementById("fav-count").textContent = pinnedItems.length
@@ -1177,18 +1364,22 @@
   }
 
   document.addEventListener("click", function(e){
-    const actionEl = e.target.closest("[data-action]");
-    if (!actionEl) return;
     const wrap = e.target.closest("[data-uri]");
     if (!wrap) return;
     const uri = wrap.getAttribute("data-uri");
     const item = allItems().concat(Object.values(getPins())).find(function(i){ return i.uri === uri; });
     if (!item) return;
-    if (actionEl.getAttribute("data-action") === "pin"){
-      openCategoryPicker(item);
-    } else if (actionEl.getAttribute("data-action") === "play"){
-      playItem(item);
+    const actionEl = e.target.closest("[data-action]");
+    if (actionEl){
+      if (actionEl.getAttribute("data-action") === "pin"){
+        openCategoryPicker(item);
+      } else if (actionEl.getAttribute("data-action") === "play"){
+        playItem(item);
+      }
+      return;
     }
+    if (item.type === "podcast") openEpisodePicker(item);
+    else openTrackPicker(item);
   });
 
   document.getElementById("search-input").addEventListener("input", function(e){
@@ -1242,6 +1433,335 @@
     }, true);
   })();
 
+  /* ============ CANCIONES DE PLAYLIST ============ */
+  let currentTracks = { item: null, tracks: [] };
+  const TRACKS_MAX = 300;
+
+  async function openTrackPicker(item){
+    currentTracks = { item: item, tracks: [] };
+    document.getElementById("tracks-modal-name").textContent = item.name;
+    document.getElementById("tracks-modal-sub").textContent = "Toca una canción para empezar por ella.";
+    document.getElementById("tracks-search").value = "";
+    document.getElementById("tracks-list").innerHTML = '<div class="modal-empty">Cargando canciones…</div>';
+    document.getElementById("tracks-modal").classList.add("visible");
+    try{
+      const playlistId = item.uri.split(":").pop();
+      let tracks = [];
+      let offset = 0;
+      while (tracks.length < TRACKS_MAX){
+        const data = await spotifyFetch("/playlists/" + playlistId + "/tracks?limit=100&offset=" + offset +
+          "&fields=total,items(track(name,uri,duration_ms,artists(name)))");
+        const items = (data && data.items) ? data.items : [];
+        items.forEach(function(row){
+          if (row.track && row.track.uri && row.track.uri.indexOf("spotify:track:") === 0){
+            tracks.push({
+              name: row.track.name,
+              uri: row.track.uri,
+              duration: row.track.duration_ms,
+              artist: (row.track.artists || []).map(function(a){ return a.name; }).join(", ")
+            });
+          }
+        });
+        offset += 100;
+        if (!data || !data.items || data.items.length < 100 || offset >= (data.total || 0)) break;
+      }
+      currentTracks.tracks = tracks;
+      if (tracks.length === TRACKS_MAX){
+        document.getElementById("tracks-modal-sub").textContent =
+          "Mostrando las primeras " + TRACKS_MAX + " canciones. Usa el buscador para el resto no cargado.";
+      }
+      renderTrackList();
+    } catch(err){
+      console.error(err);
+      document.getElementById("tracks-list").innerHTML = '<div class="modal-empty">No se pudieron cargar las canciones.</div>';
+    }
+  }
+
+  function renderTrackList(){
+    const q = document.getElementById("tracks-search").value.trim().toLowerCase();
+    const list = currentTracks.tracks.filter(function(t){
+      return !q || t.name.toLowerCase().indexOf(q) !== -1 || t.artist.toLowerCase().indexOf(q) !== -1;
+    });
+    if (list.length === 0){
+      document.getElementById("tracks-list").innerHTML = '<div class="modal-empty">' +
+        (q ? "Nada coincide con la búsqueda." : "Esta playlist está vacía.") + '</div>';
+      return;
+    }
+    document.getElementById("tracks-list").innerHTML = list.map(function(t){
+      return (
+        '<div class="episode-row" data-track="' + escAttr(t.uri) + '">' +
+          '<div style="min-width:0;flex:1;">' +
+            '<div class="ep-name">' + esc(t.name) + '</div>' +
+            '<div class="ep-meta"><span>' + esc(t.artist) + '</span><span>·</span><span>' + formatTime(t.duration) + '</span></div>' +
+          '</div>' +
+          '<button class="ep-play" aria-label="Reproducir desde aquí">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' +
+          '</button>' +
+        '</div>'
+      );
+    }).join("");
+  }
+
+  document.getElementById("tracks-search").addEventListener("input", renderTrackList);
+
+  function closeTracksModal(){
+    document.getElementById("tracks-modal").classList.remove("visible");
+  }
+  document.getElementById("tracks-modal-close").addEventListener("click", closeTracksModal);
+  document.getElementById("tracks-modal").addEventListener("click", function(e){
+    if (e.target.id === "tracks-modal") closeTracksModal();
+  });
+  document.getElementById("tracks-list").addEventListener("click", function(e){
+    const row = e.target.closest("[data-track]");
+    if (!row) return;
+    playTrack(row.getAttribute("data-track"));
+  });
+
+  async function playTrack(trackUri){
+    if (currentRadio) stopRadio();
+    const item = currentTracks.item;
+    if (!item) return;
+    const target = activeDeviceId();
+    if (!target){
+      showToast("El reproductor todavía se está conectando, prueba en unos segundos.");
+      return;
+    }
+    await activateIfNeeded();
+    const body = JSON.stringify({ context_uri: item.uri, offset: { uri: trackUri } });
+    try{
+      await spotifyFetch("/me/player/shuffle?state=" + (shuffleOn ? "true" : "false") + "&device_id=" + target, { method: "PUT" });
+      await spotifyFetch("/me/player/play?device_id=" + target, { method: "PUT", body: body });
+      bumpUsage(item.uri);
+      render();
+      closeTracksModal();
+      warnIfBrowserOnMobile();
+    } catch(err){
+      console.error(err);
+      if (deviceAsleep(err)){
+        const fresh = await recoverDevice();
+        if (fresh){
+          try{
+            await spotifyFetch("/me/player/play?device_id=" + fresh, { method: "PUT", body: body });
+            bumpUsage(item.uri);
+            render();
+            closeTracksModal();
+            return;
+          } catch(err2){ console.error(err2); }
+        }
+        offerWake();
+      } else {
+        showToast("No se pudo reproducir la canción.");
+      }
+    }
+  }
+
+  /* ============ RADIO ============
+     La radio suena en el propio LOCSPOT (no en Spotify), así que sale por
+     donde tenga la salida el aparato: altavoz, cascos o Bluetooth. */
+  const LS_RADIO_FIX = "locspot_radio_fix";
+  const RB_SERVERS = ["https://de2.api.radio-browser.info", "https://de1.api.radio-browser.info"];
+  const radioAudio = new Audio();
+  radioAudio.preload = "none";
+  let currentRadio = null;
+  let radioWatchdog = null;
+
+  function getRadioFixes(){
+    try { return JSON.parse(localStorage.getItem(LS_RADIO_FIX) || "{}"); } catch(e){ return {}; }
+  }
+  function saveRadioFix(name, url){
+    const f = getRadioFixes();
+    f[name] = { url: url, fecha: new Date().toISOString().slice(0,10) };
+    localStorage.setItem(LS_RADIO_FIX, JSON.stringify(f));
+  }
+  function clearRadioFix(name){
+    const f = getRadioFixes();
+    delete f[name];
+    localStorage.setItem(LS_RADIO_FIX, JSON.stringify(f));
+  }
+  function radioStream(st){
+    const f = getRadioFixes()[st.name];
+    return f ? f.url : st.stream;
+  }
+  function radioPlaying(){
+    return currentRadio && !radioAudio.paused;
+  }
+
+  async function stopSpotify(){
+    if (!currentState || currentState.paused) return;
+    try{
+      await spotifyFetch("/me/player/pause?device_id=" + activeDeviceId(), { method: "PUT" });
+    } catch(err){ console.error(err); }
+  }
+
+  function stopRadio(){
+    clearTimeout(radioWatchdog);
+    radioAudio.pause();
+    radioAudio.removeAttribute("src");
+    try { radioAudio.load(); } catch(e){}
+    currentRadio = null;
+  }
+
+  async function playRadio(st){
+    await stopSpotify();
+    clearInterval(progressTimer);
+    currentRadio = st;
+    currentState = null;
+    radioAudio.src = radioStream(st);
+    radioAudio.volume = volume / 100;
+    radioAudio.play().catch(function(){});
+    showRadioNowPlaying("Conectando…");
+    bumpUsage("radio:" + st.name);
+    render();
+    clearTimeout(radioWatchdog);
+    radioWatchdog = setTimeout(function(){
+      if (currentRadio === st && radioAudio.readyState < 3 && !radioAudio.paused) offerRadioRepair(st);
+    }, 12000);
+  }
+
+  function showRadioNowPlaying(estado){
+    const st = currentRadio;
+    if (!st) return;
+    document.getElementById("now-playing").classList.add("visible");
+    document.getElementById("np-track").textContent = st.name;
+    document.getElementById("np-artist").textContent = estado;
+    document.getElementById("np-art").src = st.logo;
+    document.getElementById("np-play-icon").innerHTML = radioAudio.paused
+      ? '<path d="M8 5v14l11-7z"/>'
+      : '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+    document.getElementById("np-elapsed").textContent = "";
+    document.getElementById("np-total").textContent = "";
+    document.getElementById("np-bar-fill").style.width = "100%";
+    if (fullPlayerOpen()) syncFullPlayer();
+  }
+
+  radioAudio.addEventListener("playing", function(){
+    clearTimeout(radioWatchdog);
+    const arreglada = currentRadio && getRadioFixes()[currentRadio.name];
+    showRadioNowPlaying(arreglada ? "En directo · dirección arreglada" : "En directo");
+  });
+  radioAudio.addEventListener("pause", function(){ showRadioNowPlaying("Pausado"); });
+  radioAudio.addEventListener("waiting", function(){ showRadioNowPlaying("Conectando…"); });
+  radioAudio.addEventListener("error", function(){
+    clearTimeout(radioWatchdog);
+    showRadioNowPlaying("No se pudo conectar");
+    if (currentRadio) offerRadioRepair(currentRadio);
+  });
+
+  /* --- Reparador: solo actúa cuando una emisora falla --- */
+  function normName(s){
+    return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  }
+  function hostOf(u){
+    try { return new URL(u).hostname.split(".").slice(-2).join("."); } catch(e){ return ""; }
+  }
+  async function rbFetch(path, params){
+    for (let i = 0; i < RB_SERVERS.length; i++){
+      try{
+        const res = await fetch(RB_SERVERS[i] + path + "?" + new URLSearchParams(params).toString());
+        if (res.ok) return await res.json();
+      } catch(e){}
+    }
+    return null;
+  }
+  function probeStream(url){
+    return new Promise(function(resolve){
+      const a = new Audio();
+      a.preload = "auto"; a.muted = true;
+      const t0 = performance.now();
+      let done = false;
+      const finish = function(ok){
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        a.removeAttribute("src");
+        try { a.load(); } catch(e){}
+        resolve(ok ? Math.round(performance.now() - t0) : null);
+      };
+      const timer = setTimeout(function(){ finish(false); }, 7000);
+      a.addEventListener("canplay", function(){ finish(true); });
+      a.addEventListener("loadeddata", function(){ finish(true); });
+      a.addEventListener("error", function(){ finish(false); });
+      a.src = url; a.load();
+    });
+  }
+  async function radioCandidates(st){
+    const seen = new Set([radioStream(st), st.stream]);
+    const urls = [];
+    const add = function(s){
+      if (!s) return;
+      [s.url_resolved, s.url].forEach(function(u){
+        if (u && u.indexOf("https://") === 0 && !seen.has(u)){ seen.add(u); urls.push(u); }
+      });
+    };
+    let ref = null;
+    if (st.uuid){
+      const exact = await rbFetch("/json/stations/byuuid/" + st.uuid, {});
+      if (exact && exact[0]){ ref = exact[0]; add(ref); }
+    }
+    const objetivo = normName(st.name);
+    const dominio = hostOf(st.stream);
+    const params = { name: st.name, limit: 20, hidebroken: "true", order: "votes", reverse: "true" };
+    if (ref && ref.countrycode) params.countrycode = ref.countrycode;
+    const alike = await rbFetch("/json/stations/search", params);
+    if (alike){
+      alike.forEach(function(s){
+        const mismoNombre = normName(s.name) === objetivo;
+        const mismoServidor = dominio && (hostOf(s.url_resolved) === dominio || hostOf(s.url) === dominio);
+        if (mismoNombre || mismoServidor) add(s);
+      });
+    }
+    const archivo = (st.stream.split("/").pop() || "").split("?")[0];
+    const punt = function(u){
+      return (archivo && u.indexOf(archivo) !== -1 ? 3 : 0) + (hostOf(u) === dominio ? 2 : 0);
+    };
+    urls.sort(function(a, b){ return punt(b) - punt(a); });
+    return [st.stream].concat(urls).slice(0, 8);
+  }
+
+  function offerRadioRepair(st){
+    const bar = document.getElementById("wake-banner");
+    document.getElementById("wake-name").textContent = st.name;
+    document.querySelector(".wake-text").innerHTML =
+      '<strong id="wake-name">' + esc(st.name) + '</strong> no responde. Puede que haya cambiado de servidor.';
+    const btn = document.getElementById("wake-open");
+    btn.textContent = "Buscar y arreglar";
+    btn.onclick = function(){ repairRadio(st); };
+    bar.classList.add("visible");
+  }
+
+  async function repairRadio(st){
+    const bar = document.getElementById("wake-banner");
+    const txt = document.querySelector(".wake-text");
+    const btn = document.getElementById("wake-open");
+    btn.style.display = "none";
+    txt.textContent = "Buscando una dirección que funcione para " + st.name + "…";
+    const urls = await radioCandidates(st);
+    let best = null;
+    for (let i = 0; i < urls.length; i++){
+      txt.textContent = "Probando dirección " + (i+1) + " de " + urls.length + "…";
+      const ms = await probeStream(urls[i]);
+      if (ms !== null && (best === null || ms < best.ms)) best = { url: urls[i], ms: ms };
+      if (best && best.ms < 1200) break;
+    }
+    btn.style.display = "inline-block";
+    if (!best){
+      txt.textContent = "Ninguna dirección de " + st.name + " responde ahora mismo.";
+      btn.textContent = "Cerrar";
+      btn.onclick = function(){ bar.classList.remove("visible"); };
+      return;
+    }
+    if (best.url === st.stream){
+      clearRadioFix(st.name);
+      txt.textContent = "La dirección original vuelve a funcionar (" + best.ms + " ms).";
+    } else {
+      saveRadioFix(st.name, best.url);
+      txt.textContent = st.name + " arreglada con " + hostOf(best.url) + " (" + best.ms + " ms). Comprueba que suena la emisora correcta.";
+    }
+    render();
+    btn.textContent = "Escuchar";
+    btn.onclick = function(){ bar.classList.remove("visible"); playRadio(st); };
+  }
+
   /* ============ SLEEP TIMER ============ */
   const SLEEP_OPTIONS = [5, 10, 20, 30, 45, 60];
   let sleepEndsAt = null;
@@ -1264,7 +1784,13 @@
   }
 
   async function fireSleep(){
+    const eraRadio = radioPlaying();
     clearSleep(false);
+    if (eraRadio){
+      radioAudio.pause();
+      showToast("Se acabó el tiempo: radio pausada.");
+      return;
+    }
     try{
       await spotifyFetch("/me/player/pause?device_id=" + activeDeviceId(), { method: "PUT" });
       showToast("Se acabó el tiempo: música pausada.");
@@ -1367,6 +1893,11 @@
       return '<button class="cat-option" data-min="' + m + '">' + m + ' minutos</button>';
     }).join("");
     document.getElementById("sleep-cancel").style.display = sleepEndsAt ? "block" : "none";
+    const esRadio = radioPlaying();
+    document.getElementById("sleep-night").checked = !esRadio;
+    document.getElementById("sleep-warning").textContent = esRadio
+      ? "Con la radio no hace falta el modo noche: como suena dentro de LOCSPOT, el temporizador sigue vivo aunque bloquees la pantalla."
+      : "El modo noche mantiene la pantalla encendida pero totalmente en negro, que es lo que permite que el temporizador siga vivo. Deja el móvil boca abajo o a un lado y no verás luz. Al vencer, la música se pausa y el móvil se duerme solo. Sin el modo noche, si bloqueas la pantalla el temporizador no llegará a pausar.";
     document.getElementById("sleep-modal").classList.add("visible");
   }
   function closeSleepModal(){
@@ -1406,6 +1937,34 @@
       localStorage.removeItem(LS_DEVICE);
     }
   }
+
+  /* El identificador interno cambia cada vez que la app de Spotify se reinicia,
+     así que lo fiable es el nombre: buscamos su id actual en la lista. */
+  async function resolveSavedDevice(){
+    const saved = JSON.parse(localStorage.getItem(LS_DEVICE) || "null");
+    if (!saved || !saved.name) return "none";
+    targetDeviceName = saved.name;
+    targetDeviceId = saved.id;
+    updateDeviceButton();
+    try{
+      const data = await spotifyFetch("/me/player/devices");
+      const devices = (data && data.devices) ? data.devices : [];
+      const match = devices.find(function(d){ return d.name === saved.name; }) ||
+                    devices.find(function(d){ return d.id === saved.id; });
+      if (match){
+        targetDeviceId = match.id;
+        targetDeviceName = match.name;
+        saveDevice();
+        updateDeviceButton();
+        return "online";
+      }
+      return "offline";
+    } catch(err){
+      console.error(err);
+      return "offline";
+    }
+  }
+
   function loadSavedDevice(){
     const saved = JSON.parse(localStorage.getItem(LS_DEVICE) || "null");
     if (!saved) return;
@@ -1414,10 +1973,29 @@
     updateDeviceButton();
   }
 
+  let expectingReturn = false;
+
   function openSpotifyApp(){
     showToast("Abriendo Spotify. Vuelve a LOCSPOT en cuanto se cargue.");
+    expectingReturn = true;
     window.location.href = "spotify:";
   }
+
+  /* Al volver de Spotify, buscamos de nuevo el dispositivo y lo reconectamos solos. */
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden || !expectingReturn) return;
+    expectingReturn = false;
+    setTimeout(function(){
+      resolveSavedDevice().then(function(status){
+        if (status === "online"){
+          document.getElementById("wake-banner").classList.remove("visible");
+          showToast("Conectado con " + targetDeviceName + ".");
+        } else if (status === "offline"){
+          showToast("Todavía no aparece " + targetDeviceName + ". Dale al play en Spotify un segundo y vuelve.");
+        }
+      });
+    }, 1200);
+  });
 
   function activeDeviceId(){
     return targetDeviceId || deviceId;
@@ -1594,6 +2172,7 @@
   }
 
   function sendVolume(){
+    if (currentRadio){ radioAudio.volume = volume / 100; return; }
     clearTimeout(volumeSendTimer);
     volumeSendTimer = setTimeout(async function(){
       try{
@@ -1655,6 +2234,13 @@
   // La rueda solo se muestra si el dispositivo activo admite control de volumen.
   async function refreshVolumeSupport(){
     const box = document.getElementById("npf-volume");
+    if (currentRadio){
+      volumeSupported = true;
+      volume = Math.round(radioAudio.volume * 100);
+      paintVolume();
+      box.classList.add("visible");
+      return;
+    }
     try{
       const data = await spotifyFetch("/me/player/devices");
       const devices = (data && data.devices) ? data.devices : [];
@@ -1703,10 +2289,20 @@
   }
 
   function syncFullPlayer(){
+    const esRadio = !!currentRadio;
     document.getElementById("npf-track").textContent = document.getElementById("np-track").textContent;
     document.getElementById("npf-artist").textContent = document.getElementById("np-artist").textContent;
     document.getElementById("npf-art").src = document.getElementById("np-art").src;
     document.getElementById("npf-play-icon").innerHTML = document.getElementById("np-play-icon").innerHTML;
+    document.querySelector(".npf-progress").style.display = esRadio ? "none" : "block";
+    document.getElementById("npf-back").style.display = esRadio ? "none" : "flex";
+    document.getElementById("npf-forward").style.display = esRadio ? "none" : "flex";
+    document.getElementById("npf-prev").style.display = esRadio ? "none" : "flex";
+    document.getElementById("npf-next").style.display = esRadio ? "none" : "flex";
+    if (esRadio){
+      document.getElementById("npf-where").textContent = "En directo · en este aparato";
+      return;
+    }
     document.getElementById("npf-elapsed").textContent = document.getElementById("np-elapsed").textContent;
     document.getElementById("npf-total").textContent = document.getElementById("np-total").textContent;
     document.getElementById("npf-bar-fill").style.width = document.getElementById("np-bar-fill").style.width;
@@ -1720,6 +2316,7 @@
   /* Saltos de 15 s atrás y 30 s adelante. Consultamos la posición real
      en el momento de pulsar, para no depender de la barra visual. */
   async function skipBy(deltaMs){
+    if (currentRadio){ showToast("La radio es en directo: no se puede avanzar ni retroceder."); return; }
     try{
       if (isRemote()){
         const state = await spotifyFetch("/me/player?additional_types=track,episode");
@@ -1798,7 +2395,7 @@
   document.addEventListener("keydown", function(e){
     if (e.key === "Escape"){
       if (fullPlayerOpen()){ closeFullPlayer(); return; }
-      closeModal(); closeCategoryModal(); closeDeviceModal(); closeSleepModal();
+      closeModal(); closeCategoryModal(); closeDeviceModal(); closeSleepModal(); closeTracksModal();
     }
   });
   document.getElementById("modal-filter-unplayed").addEventListener("change", function(){
@@ -1878,7 +2475,17 @@
     if (ep) playEpisode(ep);
   });
 
+  /* Si el identificador guardado ya no vale (Spotify se reinició), lo
+     re-resolvemos por nombre y devolvemos el nuevo para reintentar. */
+  async function recoverDevice(){
+    const before = targetDeviceId;
+    const status = await resolveSavedDevice();
+    if (status === "online" && targetDeviceId !== before) return targetDeviceId;
+    return null;
+  }
+
   async function playEpisode(ep){
+    if (currentRadio) stopRadio();
     const target = activeDeviceId();
     if (!target){
       showToast("El reproductor todavía se está conectando, prueba en unos segundos.");
@@ -1890,12 +2497,30 @@
         method: "PUT",
         body: JSON.stringify({ uris: [ep.uri], position_ms: ep.resume_ms || 0 })
       });
+      if (currentModalShow && currentModalShow.info) bumpUsage(currentModalShow.info.uri);
+      render();
       closeModal();
       warnIfBrowserOnMobile();
     } catch(err){
       console.error(err);
-      if (deviceAsleep(err)) offerWake();
-      else showToast("No se pudo reproducir el episodio.");
+      if (deviceAsleep(err)){
+        const fresh = await recoverDevice();
+        if (fresh){
+          try{
+            await spotifyFetch("/me/player/play?device_id=" + fresh, {
+              method: "PUT",
+              body: JSON.stringify({ uris: [ep.uri], position_ms: ep.resume_ms || 0 })
+            });
+            if (currentModalShow && currentModalShow.info) bumpUsage(currentModalShow.info.uri);
+            render();
+            closeModal();
+            return;
+          } catch(err2){ console.error(err2); }
+        }
+        offerWake();
+      } else {
+        showToast("No se pudo reproducir el episodio.");
+      }
     }
   }
 
@@ -1918,6 +2543,7 @@
   }
 
   async function playItem(item){
+    if (currentRadio) stopRadio();
     const target = activeDeviceId();
     if (!target){
       showToast("El reproductor todavía se está conectando, prueba en unos segundos.");
@@ -1936,11 +2562,28 @@
         method: "PUT",
         body: JSON.stringify({ context_uri: item.uri })
       });
+      bumpUsage(item.uri);
+      render();
       warnIfBrowserOnMobile();
     } catch(err){
       console.error(err);
-      if (deviceAsleep(err)) offerWake();
-      else showToast("No se pudo iniciar la reproducción. Prueba a elegir otro dispositivo arriba.");
+      if (deviceAsleep(err)){
+        const fresh = await recoverDevice();
+        if (fresh){
+          try{
+            await spotifyFetch("/me/player/play?device_id=" + fresh, {
+              method: "PUT",
+              body: JSON.stringify({ context_uri: item.uri })
+            });
+            bumpUsage(item.uri);
+            render();
+            return;
+          } catch(err2){ console.error(err2); }
+        }
+        offerWake();
+      } else {
+        showToast("No se pudo iniciar la reproducción. Prueba a elegir otro dispositivo arriba.");
+      }
     }
   }
 
@@ -2008,6 +2651,16 @@
   }
 
   document.getElementById("np-playpause").addEventListener("click", async function(){
+    if (currentRadio){
+      if (radioAudio.paused){
+        if (!radioAudio.src) radioAudio.src = radioStream(currentRadio);
+        radioAudio.play().catch(function(){});
+      } else {
+        radioAudio.pause();
+      }
+      render();
+      return;
+    }
     if (isRemote()){
       const paused = document.getElementById("np-play-icon").innerHTML.indexOf("M8 5v14") !== -1;
       await remoteCommand(paused ? "/me/player/play" : "/me/player/pause", "PUT");
@@ -2017,10 +2670,12 @@
     if (player) player.togglePlay();
   });
   document.getElementById("np-next").addEventListener("click", async function(){
+    if (currentRadio) return;
     if (isRemote()){ await remoteCommand("/me/player/next", "POST"); setTimeout(pollRemoteState, 600); return; }
     if (player) player.nextTrack();
   });
   document.getElementById("np-prev").addEventListener("click", async function(){
+    if (currentRadio) return;
     if (isRemote()){ await remoteCommand("/me/player/previous", "POST"); setTimeout(pollRemoteState, 600); return; }
     if (player) player.previousTrack();
   });
@@ -2097,7 +2752,13 @@
 
       player.addListener("ready", function(data){
         deviceId = data.device_id;
-        autoSelectMobileDevice();
+        resolveSavedDevice().then(function(status){
+          if (status === "none"){
+            autoSelectMobileDevice();
+          } else if (status === "offline" && isMobileDevice()){
+            offerWake();
+          }
+        });
       });
       player.addListener("not_ready", function(){
         deviceId = null;
