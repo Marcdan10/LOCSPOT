@@ -796,7 +796,7 @@
   const CLIENT_ID = "";
 
   /* Versión de la app. Súbela cada vez que hagas cambios para reconocer qué estás usando. */
-  const APP_VERSION = "2.4";
+  const APP_VERSION = "2.5";
 
   /* ============ CONFIG ============ */
   const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -1468,7 +1468,8 @@
     if (s.indexOf("401") !== -1) return "La sesión ha caducado. Vuelve a conectar con Spotify. Respuesta: " + literal;
     if (s.indexOf("403") !== -1){
       return "Spotify ha rechazado la petición: " + literal +
-             ". Suele deberse a que el permiso para leer listas se concedió antes de existir esta función; al reconectar se vuelve a pedir.";
+             ". Lista de: " + ((item && item.owner) || "desconocido") +
+             ". Si es tuya, prueba a reconectar; si es de Spotify o de una marca, es su limitación.";
     }
     if (s.indexOf("429") !== -1) return "Spotify está limitando las peticiones. Espera un momento y vuelve a intentarlo.";
     return "No se pudieron cargar las canciones. Respuesta: " + literal.slice(0, 160);
@@ -1486,6 +1487,18 @@
     document.getElementById("tracks-search").value = "";
     document.getElementById("tracks-list").innerHTML = '<div class="modal-empty">Cargando canciones…</div>';
     document.getElementById("tracks-modal").classList.add("visible");
+
+    // Spotify cerró a las apps externas el contenido de sus propias listas.
+    // Si es una de ellas, lo decimos sin gastar una petición condenada a fallar.
+    if (item.owner && /^spotify$/i.test(item.owner.trim())){
+      document.getElementById("tracks-list").innerHTML =
+        '<div class="modal-empty">Esta lista la genera Spotify, y no permite a las aplicaciones externas leer su contenido. ' +
+        'Se puede reproducir, pero no ver las canciones una a una.</div>' +
+        '<button class="cat-remove" id="tracks-play-anyway" style="margin-top:12px;">Reproducir la lista</button>';
+      const p = document.getElementById("tracks-play-anyway");
+      if (p) p.addEventListener("click", function(){ closeTracksModal(); playItem(item); });
+      return;
+    }
 
     const playlistId = item.uri.split(":").pop();
     let useFields = true;
@@ -2562,8 +2575,10 @@
   async function recoverDevice(){
     const before = targetDeviceId;
     const status = await resolveSavedDevice();
-    if (status === "online" && targetDeviceId !== before) return targetDeviceId;
-    return null;
+    if (status !== "online") return null;
+    // Sirve tanto si el identificador cambió como si el aparato
+    // simplemente había desaparecido y ya ha vuelto.
+    return targetDeviceId || before;
   }
 
   async function playEpisode(ep){
@@ -2838,11 +2853,9 @@
       player.addListener("ready", function(data){
         deviceId = data.device_id;
         resolveSavedDevice().then(function(status){
-          if (status === "none"){
-            autoSelectMobileDevice();
-          } else if (status === "offline" && isMobileDevice()){
-            offerWake();
-          }
+          // Si el dispositivo guardado está dormido no molestamos ahora:
+          // al darle al play se re-resuelve y se reintenta solo.
+          if (status === "none") autoSelectMobileDevice();
         });
       });
       player.addListener("not_ready", function(){
